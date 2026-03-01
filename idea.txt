@@ -1,0 +1,28 @@
+i want service hostable through a dockerfile
+
+user creates a configuration file
+based on that configuration file the service
+
+1.
+server gets 1..n openapi documents (either json or yaml, service does not care)
+- there should be some reasonable internal caching so not every call to this service creates call to all underlying services
+- underlying services might need basic auth
+
+2. 
+applies 0..n route transformations for each document separately ( eg /api/{the rset} -> api/someapiname/{the rest})
+
+3.
+merges the openapi documents into a single new document
+- collision: if a schema collision (same name) appears, check if the the contained properties are exact equals, 
+
+4.
+exposes the newly created document to the world
+
+
+
+
+
+separate file for the per service configuration
+- 
+serparete file for the this service configuration
+- single server for the new document, basic auth optional, route to the new openapi doc, ...
