@@ -93,3 +93,6 @@ dmypy.json
 !.env.example
 *.pem
 *.key
+
+# Git worktrees
+.worktrees/
