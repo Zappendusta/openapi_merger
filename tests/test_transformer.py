@@ -40,3 +40,45 @@ def test_path_values_preserved():
 
 def test_empty_paths():
     assert transform_paths({}, [_t("/api", "/v2")]) == {}
+
+
+def test_discard_path_exact_prefix():
+    paths = {"/internal/health": {}, "/api/users": {}}
+    result = transform_paths(paths, [], discard_paths=["/internal"])
+    assert "/internal/health" not in result
+    assert "/api/users" in result
+
+
+def test_discard_multiple_prefixes():
+    paths = {"/internal/x": {}, "/debug/y": {}, "/api/z": {}}
+    result = transform_paths(paths, [], discard_paths=["/internal", "/debug"])
+    assert "/internal/x" not in result
+    assert "/debug/y" not in result
+    assert "/api/z" in result
+
+
+def test_discard_empty_list_keeps_all():
+    paths = {"/a": {}, "/b": {}}
+    result = transform_paths(paths, [], discard_paths=[])
+    assert result == {"/a": {}, "/b": {}}
+
+
+def test_discard_before_transform():
+    # /internal is discarded before the /internal→/api transform is considered
+    paths = {"/internal/secret": {}, "/other/path": {}}
+    result = transform_paths(
+        paths,
+        [_t("/internal", "/api")],
+        discard_paths=["/internal"],
+    )
+    assert "/internal/secret" not in result
+    assert "/api/secret" not in result  # discard wins, transform not applied
+    assert "/other/path" in result
+
+
+def test_discard_no_partial_match():
+    # /internal/ should NOT discard /internalize
+    paths = {"/internalize": {}, "/internal/x": {}}
+    result = transform_paths(paths, [], discard_paths=["/internal/"])
+    assert "/internalize" in result
+    assert "/internal/x" not in result
