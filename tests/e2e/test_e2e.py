@@ -140,26 +140,34 @@ def test_order_schema_preserved(merger_client):
 # ── $ref rewriting ────────────────────────────────────────────────────────────
 
 def test_ref_rewritten_in_users_items_path(merger_client):
-    """$ref in /api/users/{id}/items response rewritten from Item -> UsersItem."""
+    """$ref in /api/users/{id}/items response rewritten from Item → UsersItem."""
     spec = _get_spec(merger_client)
+    path_item = spec["paths"].get("/api/users/{id}/items", {})
     schema_ref = (
-        spec["paths"]["/api/users/{id}/items"]["get"]
-        ["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+        path_item.get("get", {})
+        .get("responses", {}).get("200", {})
+        .get("content", {}).get("application/json", {})
+        .get("schema", {}).get("$ref")
     )
     assert schema_ref == "#/components/schemas/UsersItem", (
-        f"Expected #/components/schemas/UsersItem, got {schema_ref!r}"
+        f"Expected #/components/schemas/UsersItem, got {schema_ref!r}. "
+        f"Full path item: {path_item}"
     )
 
 
 def test_ref_rewritten_in_orders_items_path(merger_client):
-    """$ref in /api/orders/{id}/items response rewritten from Item -> OrdersItem."""
+    """$ref in /api/orders/{id}/items response rewritten from Item → OrdersItem."""
     spec = _get_spec(merger_client)
+    path_item = spec["paths"].get("/api/orders/{id}/items", {})
     schema_ref = (
-        spec["paths"]["/api/orders/{id}/items"]["get"]
-        ["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+        path_item.get("get", {})
+        .get("responses", {}).get("200", {})
+        .get("content", {}).get("application/json", {})
+        .get("schema", {}).get("$ref")
     )
     assert schema_ref == "#/components/schemas/OrdersItem", (
-        f"Expected #/components/schemas/OrdersItem, got {schema_ref!r}"
+        f"Expected #/components/schemas/OrdersItem, got {schema_ref!r}. "
+        f"Full path item: {path_item}"
     )
 
 
