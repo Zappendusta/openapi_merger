@@ -1,0 +1,8 @@
+port: 8080
+spec_path: /openapi.json
+info:
+  title: My Merged API
+  version: 1.0.0
+# auth:
+#   username: admin
+#   password: secret

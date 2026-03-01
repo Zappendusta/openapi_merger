@@ -1,0 +1,17 @@
+sources:
+  - name: users
+    url: http://users-service/openapi.json
+    schema_prefix: Users
+    # auth:
+    #   username: svc
+    #   password: secret
+    route_transforms:
+      - from: /api
+        to: /api/users
+
+  - name: orders
+    url: http://orders-service/openapi.yaml
+    schema_prefix: Orders
+    route_transforms:
+      - from: /api
+        to: /api/orders
