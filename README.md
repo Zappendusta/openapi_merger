@@ -28,7 +28,7 @@ The image is published to GitHub Container Registry. Replace `<your-org>` with y
 docker pull ghcr.io/<your-org>/openapi_merger:latest
 ```
 
-Run with your config directory mounted:
+Run with your config directory mounted (the container always listens on port 8080; change the left-hand port to use a different host port):
 
 ```bash
 docker run -p 8080:8080 \
@@ -164,7 +164,7 @@ different content are renamed with a per-source prefix to avoid silent data loss
 
 GitHub Actions workflow (`.github/workflows/docker-publish.yml`):
 
-1. Runs `pytest` on every push and PR targeting `master`.
+1. Runs `pytest` on every push to `master`, every `v*.*.*` tag push, and every PR targeting `master`.
 2. On push to `master` or a `v*.*.*` tag: builds and pushes to GHCR.
 
 Image tags produced: `latest` (master), `sha-<short>`, semver `vX.Y.Z` / `vX.Y`.

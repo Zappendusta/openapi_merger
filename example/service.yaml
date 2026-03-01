@@ -1,4 +1,4 @@
-port: 8080
+# port is not read by the service — set the listening port via uvicorn CLI or Docker -p flag
 spec_path: /openapi.json
 info:
   title: My Merged API
