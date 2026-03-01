@@ -144,7 +144,7 @@ openapi_merger/
 
 This project was designed and implemented with [Claude Code](https://claude.ai/code)
 (Anthropic's AI coding assistant), using the
-[Superpowers skill suite](https://github.com/Zappendusta/superpowers) for structured
+[Superpowers skill suite](https://github.com/obra/superpowers) for structured
 AI-driven development workflows. The original design intent was captured in
 `idea.txt` and then translated into a production-ready service through iterative
 AI-assisted development:
