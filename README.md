@@ -9,7 +9,7 @@ over HTTP — with optional Basic Auth and in-memory caching.
 1. **Fetches** 1–N upstream OpenAPI specs (JSON or YAML) on demand, supporting
    per-source Basic Auth.
 2. **Transforms** route prefixes for each source independently
-   (e.g. `/api/{rest}` → `/api/users/{rest}`).
+   (e.g. `/api/widgets` → `/api/users/widgets` when `from: /api`, `to: /api/users`).
 3. **Merges** all specs into one OpenAPI 3.x document:
    - Duplicate schemas with identical content are silently deduplicated.
    - Colliding schemas (same name, different content) are automatically
@@ -22,7 +22,7 @@ Results are cached in memory. A `?refresh=true` query parameter forces a rebuild
 
 ## Quick start with Docker
 
-Pull from GitHub Container Registry:
+The image is published to GitHub Container Registry. Replace `<your-org>` with your GitHub username or organisation (e.g. `paulusdettmer`):
 
 ```bash
 docker pull ghcr.io/<your-org>/openapi_merger:latest
@@ -44,8 +44,9 @@ The service expects two files in `/config/`:
 
 ### service.yaml
 
+> **Note:** The listening port is set via the uvicorn command (or `-p` in Docker), not in this file.
+
 ```yaml
-port: 8080
 spec_path: /openapi.json   # path where the merged spec is served
 
 info:
@@ -112,6 +113,8 @@ SERVICE_CONFIG=example/service.yaml \
 SOURCES_CONFIG=example/sources.yaml \
 uvicorn openapi_merger.main:app --port 8080
 ```
+
+> **Note:** The example configs point to placeholder upstream URLs (`http://users-service/...`). The service will start, but the first request to the spec endpoint will return a 502 until you update `sources.yaml` with real upstream URLs.
 
 ## Running tests
 
