@@ -77,8 +77,15 @@ def test_discard_before_transform():
 
 
 def test_discard_no_partial_match():
-    # /internal/ should NOT discard /internalize
+    # /internal should NOT discard /internalize (path-boundary safe)
     paths = {"/internalize": {}, "/internal/x": {}}
-    result = transform_paths(paths, [], discard_paths=["/internal/"])
+    result = transform_paths(paths, [], discard_paths=["/internal"])
     assert "/internalize" in result
     assert "/internal/x" not in result
+
+
+def test_discard_exact_path_no_trailing_segment():
+    paths = {"/internal": {}, "/api/users": {}}
+    result = transform_paths(paths, [], discard_paths=["/internal"])
+    assert "/internal" not in result
+    assert "/api/users" in result

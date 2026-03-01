@@ -8,7 +8,7 @@ def transform_paths(
 ) -> dict:
     result = {}
     for path, value in paths.items():
-        if any(path.startswith(prefix) for prefix in discard_paths):
+        if any(path == prefix or path.startswith(prefix.rstrip("/") + "/") for prefix in discard_paths):
             continue
         new_path = path
         for t in transforms:
