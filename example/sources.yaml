@@ -5,6 +5,9 @@ sources:
     # auth:
     #   username: svc
     #   password: secret
+    # discard_paths:          # drop these upstream paths entirely
+    #   - /internal
+    #   - /health
     route_transforms:
       - from: /api
         to: /api/users

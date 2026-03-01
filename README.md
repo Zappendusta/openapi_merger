@@ -8,8 +8,9 @@ over HTTP — with optional Basic Auth and in-memory caching.
 
 1. **Fetches** 1–N upstream OpenAPI specs (JSON or YAML) on demand, supporting
    per-source Basic Auth.
-2. **Transforms** route prefixes for each source independently
-   (e.g. `/api/widgets` → `/api/users/widgets` when `from: /api`, `to: /api/users`).
+2. **Transforms** route prefixes for each source independently, and optionally
+   **discards** unwanted upstream paths by prefix
+   (e.g. `discard_paths: [/internal]` drops all paths starting with `/internal`).
 3. **Merges** all specs into one OpenAPI 3.x document:
    - Duplicate schemas with identical content are silently deduplicated.
    - Colliding schemas (same name, different content) are automatically
@@ -69,6 +70,8 @@ sources:
     # auth:                  # optional upstream Basic Auth
     #   username: svc
     #   password: secret
+    discard_paths:           # drop these upstream paths before merging
+      - /internal            # any path starting with /internal is excluded
     route_transforms:
       - from: /api
         to: /api/users       # rewrites /api/... → /api/users/...
