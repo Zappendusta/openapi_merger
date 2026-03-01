@@ -22,10 +22,10 @@ Results are cached in memory. A `?refresh=true` query parameter forces a rebuild
 
 ## Quick start with Docker
 
-The image is published to GitHub Container Registry. Replace `<your-org>` with your GitHub username or organisation (e.g. `paulusdettmer`):
+The image is published to GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/<your-org>/openapi_merger:latest
+docker pull ghcr.io/Zappendusta/openapi_merger:latest
 ```
 
 Run with your config directory mounted (the container always listens on port 8080; change the left-hand port to use a different host port):
@@ -33,7 +33,7 @@ Run with your config directory mounted (the container always listens on port 808
 ```bash
 docker run -p 8080:8080 \
   -v $(pwd)/config:/config \
-  ghcr.io/<your-org>/openapi_merger:latest
+  ghcr.io/Zappendusta/openapi_merger:latest
 ```
 
 The service expects two files in `/config/`:
@@ -143,7 +143,9 @@ openapi_merger/
 ## How it was built
 
 This project was designed and implemented with [Claude Code](https://claude.ai/code)
-(Anthropic's AI coding assistant). The original design intent was captured in
+(Anthropic's AI coding assistant), using the
+[Superpowers skill suite](https://github.com/Zappendusta/superpowers) for structured
+AI-driven development workflows. The original design intent was captured in
 `idea.txt` and then translated into a production-ready service through iterative
 AI-assisted development:
 
