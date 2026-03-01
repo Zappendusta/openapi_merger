@@ -21,6 +21,7 @@ class SourceConfig(BaseModel):
     schema_prefix: str
     auth: AuthConfig | None = None
     route_transforms: list[RouteTransform] = []
+    discard_paths: list[str] = []
 
 
 class InfoConfig(BaseModel):

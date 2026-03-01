@@ -79,3 +79,26 @@ def test_load_sources_config_invalid_yaml(tmp_path):
     f.write_text(": : bad yaml {[")
     with pytest.raises(Exception):
         load_sources_config(str(f))
+
+
+def test_source_discard_paths_defaults_empty():
+    cfg = SourcesConfig.model_validate({
+        "sources": [{
+            "name": "svc",
+            "url": "http://svc/openapi.json",
+            "schema_prefix": "Svc",
+        }]
+    })
+    assert cfg.sources[0].discard_paths == []
+
+
+def test_source_with_discard_paths():
+    cfg = SourcesConfig.model_validate({
+        "sources": [{
+            "name": "svc",
+            "url": "http://svc/openapi.json",
+            "schema_prefix": "Svc",
+            "discard_paths": ["/internal", "/health"],
+        }]
+    })
+    assert cfg.sources[0].discard_paths == ["/internal", "/health"]
