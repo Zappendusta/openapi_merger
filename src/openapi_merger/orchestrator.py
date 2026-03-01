@@ -24,7 +24,9 @@ class MergeOrchestrator:
         processed = []
         for source, doc in zip(self._sources.sources, docs):
             doc["paths"] = transform_paths(
-                doc.get("paths", {}), source.route_transforms
+                doc.get("paths", {}),
+                source.route_transforms,
+                discard_paths=source.discard_paths,
             )
             processed.append((source.name, source.schema_prefix, doc))
         return merge_specs(

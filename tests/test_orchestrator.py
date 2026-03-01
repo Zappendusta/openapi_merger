@@ -93,3 +93,35 @@ async def test_upstream_error_propagates():
     o = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG)
     with pytest.raises(RuntimeError, match="users"):
         await o.get_merged()
+
+
+_SPEC_INTERNAL = {
+    "openapi": "3.0.0",
+    "info": {"title": "Internal", "version": "1"},
+    "paths": {"/internal/secret": {"get": {}}, "/api/users": {"get": {}}},
+    "components": {},
+}
+
+_SOURCES_DISCARD_CFG = SourcesConfig.model_validate({
+    "sources": [
+        {
+            "name": "internal",
+            "url": "http://internal/openapi.json",
+            "schema_prefix": "Internal",
+            "route_transforms": [],
+            "discard_paths": ["/internal"],
+        },
+    ]
+})
+
+
+@respx.mock
+async def test_discard_paths_excluded():
+    respx.get("http://internal/openapi.json").mock(
+        return_value=httpx.Response(200, json=_SPEC_INTERNAL)
+    )
+
+    o = MergeOrchestrator(_SVC_CFG, _SOURCES_DISCARD_CFG)
+    merged = await o.get_merged()
+    assert "/internal/secret" not in merged["paths"]
+    assert "/api/users" in merged["paths"]
