@@ -74,20 +74,36 @@ def detect_schema_collisions(sources: list[Source]) -> dict[str, list[str]]:
 
 def merge_specs(sources: list[Source], title: str, version: str) -> dict:
     collisions = detect_schema_collisions(sources)
+    op_collisions = detect_operation_id_collisions(sources)
 
-    # Apply prefix only to colliding schema names (and their $refs) per source
+    # Apply prefix only to colliding schema names (and their $refs) per source,
+    # and to colliding operationIds per source.
     processed: list[Source] = []
     for source_name, prefix, doc in sources:
         doc = copy.deepcopy(doc)
-        colliding = [
+
+        # --- Schema collision resolution (unchanged) ---
+        colliding_schemas = [
             name for name, names in collisions.items() if source_name in names
         ]
-        for name in colliding:
+        for name in colliding_schemas:
             new_name = f"{prefix}{name}"
             schemas = doc.setdefault("components", {}).setdefault("schemas", {})
             if name in schemas:
                 schemas[new_name] = schemas.pop(name)
             doc = rewrite_ref(doc, name, new_name)
+
+        # --- Operation ID collision resolution ---
+        colliding_op_ids = {
+            op_id for op_id, names in op_collisions.items() if source_name in names
+        }
+        for path_item in doc.get("paths", {}).values():
+            for method, operation in path_item.items():
+                if method not in HTTP_METHODS:
+                    continue
+                if isinstance(operation, dict) and operation.get("operationId") in colliding_op_ids:
+                    operation["operationId"] = f"{prefix}{operation['operationId']}"
+
         processed.append((source_name, prefix, doc))
 
     # Merge paths — error on duplicates

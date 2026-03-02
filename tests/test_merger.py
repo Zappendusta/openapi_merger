@@ -262,3 +262,75 @@ def test_merge_preserves_openapi_version_from_first_source():
     ]
     merged = merge_specs(sources, title="T", version="1")
     assert merged["openapi"] == "3.1.0"
+
+
+def _doc_with_op(path, method, op_id, summary="s", schemas=None):
+    return {
+        "openapi": "3.0.0",
+        "info": {"title": "T", "version": "1"},
+        "paths": {path: {method: {"operationId": op_id, "summary": summary, "responses": {"200": {}}}}},
+        "components": {"schemas": schemas or {}},
+    }
+
+
+def test_merge_no_op_id_collision():
+    sources = [
+        ("a", "A", _doc_with_op("/a", "get", "listA")),
+        ("b", "B", _doc_with_op("/b", "get", "listB")),
+    ]
+    merged = merge_specs(sources, title="T", version="1")
+    assert merged["paths"]["/a"]["get"]["operationId"] == "listA"
+    assert merged["paths"]["/b"]["get"]["operationId"] == "listB"
+
+
+def test_merge_op_id_collision_resolved_with_prefix():
+    sources = [
+        ("a", "A", _doc_with_op("/a", "get", "doThing", summary="from a")),
+        ("b", "B", _doc_with_op("/b", "get", "doThing", summary="from b")),
+    ]
+    merged = merge_specs(sources, title="T", version="1")
+    assert merged["paths"]["/a"]["get"]["operationId"] == "AdoThing"
+    assert merged["paths"]["/b"]["get"]["operationId"] == "BdoThing"
+
+
+def test_merge_equal_op_ids_not_prefixed():
+    op_def = {"operationId": "doThing", "summary": "same", "responses": {"200": {}}}
+    sources = [
+        ("a", "A", {
+            "openapi": "3.0.0", "info": {"title": "T", "version": "1"},
+            "paths": {"/a": {"get": op_def}},
+            "components": {"schemas": {}},
+        }),
+        ("b", "B", {
+            "openapi": "3.0.0", "info": {"title": "T", "version": "1"},
+            "paths": {"/b": {"get": op_def}},
+            "components": {"schemas": {}},
+        }),
+    ]
+    merged = merge_specs(sources, title="T", version="1")
+    assert merged["paths"]["/a"]["get"]["operationId"] == "doThing"
+    assert merged["paths"]["/b"]["get"]["operationId"] == "doThing"
+
+
+def test_merge_op_id_collision_multiple_methods():
+    sources = [
+        ("a", "A", {
+            "openapi": "3.0.0", "info": {"title": "T", "version": "1"},
+            "paths": {"/a": {
+                "get": {"operationId": "getItem", "summary": "a", "responses": {"200": {}}},
+                "post": {"operationId": "createItem", "responses": {"200": {}}},
+            }},
+            "components": {"schemas": {}},
+        }),
+        ("b", "B", {
+            "openapi": "3.0.0", "info": {"title": "T", "version": "1"},
+            "paths": {"/b": {
+                "get": {"operationId": "getItem", "summary": "b", "responses": {"200": {}}},
+            }},
+            "components": {"schemas": {}},
+        }),
+    ]
+    merged = merge_specs(sources, title="T", version="1")
+    assert merged["paths"]["/a"]["get"]["operationId"] == "AgetItem"
+    assert merged["paths"]["/b"]["get"]["operationId"] == "BgetItem"
+    assert merged["paths"]["/a"]["post"]["operationId"] == "createItem"  # no collision
