@@ -19,6 +19,38 @@ def rewrite_ref(node, old_name: str, new_name: str):
     return node
 
 
+HTTP_METHODS = {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
+
+
+def detect_operation_id_collisions(sources: list[Source]) -> dict[str, list[str]]:
+    """
+    Returns operationId -> [source_names] for IDs that appear in multiple
+    sources with different operation content. Equal-content duplicates are not
+    collisions (mirrors detect_schema_collisions behaviour).
+    """
+    op_map: dict[str, list[tuple[str, dict]]] = {}
+    for source_name, _prefix, doc in sources:
+        for _path, path_item in doc.get("paths", {}).items():
+            for method, operation in path_item.items():
+                if method not in HTTP_METHODS:
+                    continue
+                if not isinstance(operation, dict):
+                    continue
+                op_id = operation.get("operationId")
+                if op_id:
+                    op_map.setdefault(op_id, []).append((source_name, operation))
+
+    collisions: dict[str, list[str]] = {}
+    for op_id, entries in op_map.items():
+        if len(entries) <= 1:
+            continue
+        first = entries[0][1]
+        if all(e[1] == first for e in entries[1:]):
+            continue  # all equal: not a collision
+        collisions[op_id] = [e[0] for e in entries]
+    return collisions
+
+
 def detect_schema_collisions(sources: list[Source]) -> dict[str, list[str]]:
     """
     Returns schema_name -> [source_names] for names that appear in multiple

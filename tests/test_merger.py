@@ -1,5 +1,10 @@
 import pytest
-from openapi_merger.merger import rewrite_ref, detect_schema_collisions, merge_specs
+from openapi_merger.merger import (
+    rewrite_ref,
+    detect_schema_collisions,
+    detect_operation_id_collisions,
+    merge_specs,
+)
 
 
 # --- rewrite_ref ---
@@ -83,6 +88,90 @@ def test_source_with_no_components():
         ("b", "B", {"components": {"schemas": {"Foo": {"type": "object"}}}}),
     ]
     assert detect_schema_collisions(sources) == {}
+
+
+# --- detect_operation_id_collisions ---
+
+def _op(op_id, summary="s"):
+    return {"operationId": op_id, "summary": summary, "responses": {"200": {}}}
+
+
+def test_no_op_id_collision():
+    sources = [
+        ("a", "A", {"paths": {"/a": {"get": _op("listA")}}}),
+        ("b", "B", {"paths": {"/b": {"get": _op("listB")}}}),
+    ]
+    assert detect_operation_id_collisions(sources) == {}
+
+
+def test_equal_op_ids_same_content_not_a_collision():
+    op = _op("listFoo")
+    sources = [
+        ("a", "A", {"paths": {"/a": {"get": op}}}),
+        ("b", "B", {"paths": {"/b": {"get": op}}}),
+    ]
+    assert detect_operation_id_collisions(sources) == {}
+
+
+def test_different_content_same_op_id_is_collision():
+    sources = [
+        ("a", "A", {"paths": {"/a": {"get": _op("doThing", summary="from a")}}}),
+        ("b", "B", {"paths": {"/b": {"get": _op("doThing", summary="from b")}}}),
+    ]
+    collisions = detect_operation_id_collisions(sources)
+    assert "doThing" in collisions
+    assert set(collisions["doThing"]) == {"a", "b"}
+
+
+def test_op_id_collision_three_sources_one_differs():
+    op = _op("doThing")
+    sources = [
+        ("a", "A", {"paths": {"/a": {"get": op}}}),
+        ("b", "B", {"paths": {"/b": {"get": op}}}),
+        ("c", "C", {"paths": {"/c": {"get": _op("doThing", summary="different")}}}),
+    ]
+    collisions = detect_operation_id_collisions(sources)
+    assert "doThing" in collisions
+
+
+def test_op_id_collision_multiple_methods():
+    sources = [
+        ("a", "A", {"paths": {"/a": {
+            "get": _op("getItem", summary="a"),
+            "post": _op("createItem"),
+        }}}),
+        ("b", "B", {"paths": {"/b": {
+            "get": _op("getItem", summary="b"),
+        }}}),
+    ]
+    collisions = detect_operation_id_collisions(sources)
+    assert "getItem" in collisions
+    assert "createItem" not in collisions
+
+
+def test_op_id_no_operation_id_field_ignored():
+    sources = [
+        ("a", "A", {"paths": {"/a": {"get": {"responses": {"200": {}}}}}}),
+        ("b", "B", {"paths": {"/b": {"get": {"responses": {"200": {}}}}}}),
+    ]
+    assert detect_operation_id_collisions(sources) == {}
+
+
+def test_op_id_source_with_no_paths():
+    sources = [
+        ("a", "A", {"components": {}}),
+        ("b", "B", {"paths": {"/b": {"get": _op("listB")}}}),
+    ]
+    assert detect_operation_id_collisions(sources) == {}
+
+
+def test_non_method_keys_in_path_item_ignored():
+    # 'parameters' and 'summary' are valid path-item keys, not operations
+    sources = [
+        ("a", "A", {"paths": {"/a": {"get": _op("getA"), "parameters": [], "summary": "x"}}}),
+        ("b", "B", {"paths": {"/b": {"get": _op("getB")}}}),
+    ]
+    assert detect_operation_id_collisions(sources) == {}
 
 
 # --- merge_specs ---
