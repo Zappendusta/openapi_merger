@@ -220,3 +220,49 @@ def test_merger_logs_path_collision_and_raises(monkeypatch, capsys, reset_struct
     assert "event=merge.path_collision" in out
     assert "level=error" in out
     assert "path=/dup" in out
+
+
+@respx.mock
+def test_full_request_chain_shares_request_id(tmp_path, monkeypatch, capsys, reset_structlog_to_stdout):
+    service_yaml = tmp_path / "service.yaml"
+    service_yaml.write_text(
+        "spec_path: /openapi\n"
+        "info:\n  title: t\n  version: '1'\n"
+    )
+    sources_yaml = tmp_path / "sources.yaml"
+    sources_yaml.write_text(
+        "sources:\n"
+        "  - name: users\n"
+        "    url: https://x/api\n"
+        "    schema_prefix: U\n"
+    )
+    monkeypatch.setenv("SERVICE_CONFIG", str(service_yaml))
+    monkeypatch.setenv("SOURCES_CONFIG", str(sources_yaml))
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.setenv("LOG_FORMAT", "logfmt")
+
+    respx.get("https://x/api").mock(
+        return_value=httpx.Response(
+            200,
+            json={"openapi": "3.0.0", "paths": {"/a": {"get": {}}}, "components": {}},
+        )
+    )
+
+    import openapi_merger.main as main_mod
+    importlib.reload(main_mod)
+
+    with TestClient(main_mod.app) as client:
+        resp = client.get("/openapi")
+    assert resp.status_code == 200
+    rid = resp.headers["X-Request-ID"]
+
+    out = capsys.readouterr().out
+    lines = [l for l in out.splitlines() if f"request_id={rid}" in l]
+    events_seen = {re.search(r"event=(\S+)", l).group(1) for l in lines}
+    assert "merge.cache.miss" in events_seen
+    assert "merge.build.start" in events_seen
+    assert "spec.fetch.start" in events_seen
+    assert "spec.fetch.ok" in events_seen
+    assert "spec.transform.ok" in events_seen
+    assert "merge.build.ok" in events_seen
+    assert "request.completed" in events_seen
