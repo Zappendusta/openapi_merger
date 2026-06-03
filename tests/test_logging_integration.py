@@ -1,5 +1,4 @@
 import importlib
-import io
 import os
 import re
 
@@ -46,3 +45,25 @@ def test_request_id_is_propagated_into_response(app_with_logs):
         resp = client.get("/health")
     rid = resp.headers["X-Request-ID"]
     assert len(rid) >= 8
+
+
+def test_client_supplied_request_id_is_echoed(app_with_logs):
+    main_mod, capsys = app_with_logs
+    with TestClient(main_mod.app) as client:
+        resp = client.get("/health", headers={"X-Request-ID": "client-rid-123"})
+    assert resp.headers["X-Request-ID"] == "client-rid-123"
+    out = capsys.readouterr().out
+    assert "request_id=client-rid-123" in out
+
+
+def test_malicious_request_id_is_sanitized(app_with_logs):
+    main_mod, _ = app_with_logs
+    with TestClient(main_mod.app) as client:
+        resp = client.get(
+            "/health",
+            headers={"X-Request-ID": "abc def\ninjected-line"},
+        )
+    # Whitespace and newline stripped; only allowed chars retained
+    assert "\n" not in resp.headers["X-Request-ID"]
+    assert " " not in resp.headers["X-Request-ID"]
+    assert resp.headers["X-Request-ID"].startswith("abc")

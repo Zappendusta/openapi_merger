@@ -1,5 +1,6 @@
 import importlib.metadata
 import os
+import re
 import secrets
 import time
 import uuid
@@ -15,6 +16,16 @@ from openapi_merger.logging_config import configure_logging
 from openapi_merger.orchestrator import MergeOrchestrator
 
 log = structlog.get_logger()
+
+_REQUEST_ID_RE = re.compile(r"[^A-Za-z0-9._\-]")
+
+
+def _sanitize_request_id(raw: str | None) -> str:
+    if not raw:
+        return uuid.uuid4().hex
+    cleaned = _REQUEST_ID_RE.sub("", raw.strip())[:64]
+    return cleaned or uuid.uuid4().hex
+
 
 _security = HTTPBasic(auto_error=False)
 
@@ -93,7 +104,7 @@ app = FastAPI(lifespan=lifespan, openapi_url=None, docs_url=None, redoc_url=None
 
 @app.middleware("http")
 async def _request_log_middleware(request: Request, call_next):
-    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
+    request_id = _sanitize_request_id(request.headers.get("x-request-id"))
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(request_id=request_id)
     start = time.perf_counter()
