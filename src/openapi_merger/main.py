@@ -1,3 +1,4 @@
+import importlib.metadata
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -22,13 +23,13 @@ _orchestrator: MergeOrchestrator | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _service_config, _orchestrator
+    configure_logging()
     svc_path = os.getenv("SERVICE_CONFIG", "/config/service.yaml")
     src_path = os.getenv("SOURCES_CONFIG", "/config/sources.yaml")
     _service_config = load_service_config(svc_path)
     sources_config = load_sources_config(src_path)
     _orchestrator = MergeOrchestrator(_service_config, sources_config)
 
-    configure_logging()
     log.info(
         "app.startup",
         service_config=svc_path,
@@ -36,6 +37,7 @@ async def lifespan(app: FastAPI):
         spec_path=_service_config.spec_path,
         sources_count=len(sources_config.sources),
         auth_enabled=_service_config.auth is not None,
+        version=importlib.metadata.version("openapi-merger"),
     )
 
     async def _get_spec(
