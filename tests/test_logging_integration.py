@@ -177,3 +177,46 @@ def test_orchestrator_logs_build_failure(monkeypatch, capsys, reset_structlog_to
     out = capsys.readouterr().out
     assert "event=merge.build.failed" in out
     assert "level=error" in out
+
+
+def test_merger_logs_schema_collision(monkeypatch, capsys, reset_structlog_to_stdout):
+    from openapi_merger.merger import merge_specs
+
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.setenv("LOG_FORMAT", "logfmt")
+    configure_logging()
+
+    a = {
+        "openapi": "3.0.0",
+        "paths": {"/a": {"get": {}}},
+        "components": {"schemas": {"Item": {"type": "object", "properties": {"x": {"type": "integer"}}}}},
+    }
+    b = {
+        "openapi": "3.0.0",
+        "paths": {"/b": {"get": {}}},
+        "components": {"schemas": {"Item": {"type": "object", "properties": {"x": {"type": "string"}}}}},
+    }
+    merge_specs([("a", "A", a), ("b", "B", b)], title="t", version="1")
+
+    out = capsys.readouterr().out
+    assert "event=merge.collision.schema" in out
+    assert "level=warning" in out
+    assert "name=Item" in out
+
+
+def test_merger_logs_path_collision_and_raises(monkeypatch, capsys, reset_structlog_to_stdout):
+    from openapi_merger.merger import merge_specs
+
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.setenv("LOG_FORMAT", "logfmt")
+    configure_logging()
+
+    a = {"openapi": "3.0.0", "paths": {"/dup": {"get": {}}}, "components": {}}
+    b = {"openapi": "3.0.0", "paths": {"/dup": {"get": {}}}, "components": {}}
+    with pytest.raises(RuntimeError):
+        merge_specs([("a", "A", a), ("b", "B", b)], title="t", version="1")
+
+    out = capsys.readouterr().out
+    assert "event=merge.path_collision" in out
+    assert "level=error" in out
+    assert "path=/dup" in out

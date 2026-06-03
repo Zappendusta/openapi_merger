@@ -1,6 +1,10 @@
 from __future__ import annotations
 import copy
 
+import structlog
+
+log = structlog.get_logger()
+
 # Type alias for clarity
 Source = tuple[str, str, dict]  # (name, schema_prefix, doc)
 
@@ -76,6 +80,21 @@ def merge_specs(sources: list[Source], title: str, version: str) -> dict:
     collisions = detect_schema_collisions(sources)
     op_collisions = detect_operation_id_collisions(sources)
 
+    for name, sources_with_name in collisions.items():
+        log.warning(
+            "merge.collision.schema",
+            name=name,
+            sources=sources_with_name,
+            resolution="prefix",
+        )
+    for op_id, sources_with_op in op_collisions.items():
+        log.warning(
+            "merge.collision.operation_id",
+            operation_id=op_id,
+            sources=sources_with_op,
+            resolution="prefix",
+        )
+
     # Apply prefix only to colliding schema names (and their $refs) per source,
     # and to colliding operationIds per source.
     processed: list[Source] = []
@@ -111,6 +130,11 @@ def merge_specs(sources: list[Source], title: str, version: str) -> dict:
     for source_name, _prefix, doc in processed:
         for path, value in doc.get("paths", {}).items():
             if path in merged_paths:
+                log.error(
+                    "merge.path_collision",
+                    path=path,
+                    source=source_name,
+                )
                 raise RuntimeError(
                     f"Path collision: '{path}' found in '{source_name}' and an earlier source"
                 )
