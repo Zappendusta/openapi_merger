@@ -15,6 +15,7 @@ async def fetch_spec(source: SourceConfig) -> dict:
         auth = (source.auth.username, source.auth.password)
 
     log.info("spec.fetch.start", source=source.name, url=source.url)
+    # Timer covers network only — parsing happens after duration_ms is captured.
     start = time.perf_counter()
 
     try:

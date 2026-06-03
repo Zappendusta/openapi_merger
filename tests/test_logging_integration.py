@@ -1,9 +1,17 @@
+import asyncio
 import importlib
 import os
 import re
+import sys
 
+import httpx
 import pytest
+import respx
 from fastapi.testclient import TestClient
+
+from openapi_merger.config import SourceConfig
+from openapi_merger.fetcher import fetch_spec
+from openapi_merger.logging_config import configure_logging
 
 
 @pytest.fixture
@@ -69,12 +77,6 @@ def test_malicious_request_id_is_sanitized(app_with_logs):
     assert resp.headers["X-Request-ID"].startswith("abc")
 
 
-import sys
-
-import httpx
-import respx
-
-
 @pytest.fixture()
 def reset_structlog_to_stdout():
     """Reset structlog to write to real sys.stdout after each fetcher logging test.
@@ -85,17 +87,11 @@ def reset_structlog_to_stdout():
     This fixture restores structlog to use the real stdout after the test body.
     """
     yield
-    from openapi_merger.logging_config import configure_logging
     configure_logging(stream=sys.__stdout__)
 
 
 @respx.mock
 def test_fetcher_logs_success(monkeypatch, capsys, reset_structlog_to_stdout):
-    from openapi_merger.logging_config import configure_logging
-    from openapi_merger.config import SourceConfig
-    from openapi_merger.fetcher import fetch_spec
-    import asyncio
-
     monkeypatch.setenv("LOG_LEVEL", "INFO")
     monkeypatch.setenv("LOG_FORMAT", "logfmt")
     configure_logging()
@@ -117,11 +113,6 @@ def test_fetcher_logs_success(monkeypatch, capsys, reset_structlog_to_stdout):
 
 @respx.mock
 def test_fetcher_logs_failure_then_raises(monkeypatch, capsys, reset_structlog_to_stdout):
-    from openapi_merger.logging_config import configure_logging
-    from openapi_merger.config import SourceConfig
-    from openapi_merger.fetcher import fetch_spec
-    import asyncio
-
     monkeypatch.setenv("LOG_LEVEL", "INFO")
     monkeypatch.setenv("LOG_FORMAT", "logfmt")
     configure_logging()
