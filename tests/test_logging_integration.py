@@ -128,3 +128,52 @@ def test_fetcher_logs_failure_then_raises(monkeypatch, capsys, reset_structlog_t
     assert "level=error" in out
     assert "source=users" in out
     assert "status=503" in out
+
+
+@respx.mock
+def test_orchestrator_logs_cache_miss_then_hit(monkeypatch, capsys, reset_structlog_to_stdout):
+    from openapi_merger.config import ServiceConfig, SourcesConfig, InfoConfig
+    from openapi_merger.orchestrator import MergeOrchestrator
+
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.setenv("LOG_FORMAT", "logfmt")
+    configure_logging()
+
+    respx.get("https://x/api").mock(
+        return_value=httpx.Response(200, json={"openapi": "3.0.0", "paths": {"/a": {"get": {}}}, "components": {}})
+    )
+    svc = ServiceConfig(spec_path="/openapi", info=InfoConfig(title="t", version="1"))
+    src_cfg = SourcesConfig(sources=[SourceConfig(name="users", url="https://x/api", schema_prefix="U")])
+    orch = MergeOrchestrator(svc, src_cfg)
+
+    asyncio.run(orch.get_merged())
+    asyncio.run(orch.get_merged())  # second call → cache hit
+
+    out = capsys.readouterr().out
+    assert "event=merge.cache.miss" in out
+    assert "event=merge.build.start" in out
+    assert "event=merge.build.ok" in out
+    assert "event=merge.cache.hit" in out
+    assert "paths_count=1" in out
+
+
+@respx.mock
+def test_orchestrator_logs_build_failure(monkeypatch, capsys, reset_structlog_to_stdout):
+    from openapi_merger.config import ServiceConfig, SourcesConfig, InfoConfig
+    from openapi_merger.orchestrator import MergeOrchestrator
+
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.setenv("LOG_FORMAT", "logfmt")
+    configure_logging()
+
+    respx.get("https://x/api").mock(return_value=httpx.Response(500))
+    svc = ServiceConfig(spec_path="/openapi", info=InfoConfig(title="t", version="1"))
+    src_cfg = SourcesConfig(sources=[SourceConfig(name="users", url="https://x/api", schema_prefix="U")])
+    orch = MergeOrchestrator(svc, src_cfg)
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(orch.get_merged())
+
+    out = capsys.readouterr().out
+    assert "event=merge.build.failed" in out
+    assert "level=error" in out
