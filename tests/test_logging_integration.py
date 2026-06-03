@@ -67,3 +67,73 @@ def test_malicious_request_id_is_sanitized(app_with_logs):
     assert "\n" not in resp.headers["X-Request-ID"]
     assert " " not in resp.headers["X-Request-ID"]
     assert resp.headers["X-Request-ID"].startswith("abc")
+
+
+import sys
+
+import httpx
+import respx
+
+
+@pytest.fixture()
+def reset_structlog_to_stdout():
+    """Reset structlog to write to real sys.stdout after each fetcher logging test.
+
+    capsys temporarily replaces sys.stdout with a CaptureIO buffer.
+    configure_logging() called without a stream captures that buffer reference.
+    After the test the buffer is closed, breaking any subsequent test that logs.
+    This fixture restores structlog to use the real stdout after the test body.
+    """
+    yield
+    from openapi_merger.logging_config import configure_logging
+    configure_logging(stream=sys.__stdout__)
+
+
+@respx.mock
+def test_fetcher_logs_success(monkeypatch, capsys, reset_structlog_to_stdout):
+    from openapi_merger.logging_config import configure_logging
+    from openapi_merger.config import SourceConfig
+    from openapi_merger.fetcher import fetch_spec
+    import asyncio
+
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.setenv("LOG_FORMAT", "logfmt")
+    configure_logging()
+
+    respx.get("https://x/api").mock(
+        return_value=httpx.Response(200, json={"openapi": "3.0.0", "paths": {}})
+    )
+    src = SourceConfig(name="users", url="https://x/api", schema_prefix="U")
+    asyncio.run(fetch_spec(src))
+
+    out = capsys.readouterr().out
+    assert "event=spec.fetch.start" in out
+    assert "event=spec.fetch.ok" in out
+    assert "source=users" in out
+    assert "status=200" in out
+    assert re.search(r"duration_ms=\d+", out)
+    assert "format=json" in out
+
+
+@respx.mock
+def test_fetcher_logs_failure_then_raises(monkeypatch, capsys, reset_structlog_to_stdout):
+    from openapi_merger.logging_config import configure_logging
+    from openapi_merger.config import SourceConfig
+    from openapi_merger.fetcher import fetch_spec
+    import asyncio
+
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.setenv("LOG_FORMAT", "logfmt")
+    configure_logging()
+
+    respx.get("https://x/api").mock(return_value=httpx.Response(503))
+    src = SourceConfig(name="users", url="https://x/api", schema_prefix="U")
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(fetch_spec(src))
+
+    out = capsys.readouterr().out
+    assert "event=spec.fetch.failed" in out
+    assert "level=error" in out
+    assert "source=users" in out
+    assert "status=503" in out
