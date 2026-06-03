@@ -56,6 +56,13 @@ def test_contextvars_are_merged(monkeypatch):
     assert "request_id=abc-123" in buf.getvalue()
 
 
+def test_noisy_stdlib_loggers_are_silenced(monkeypatch):
+    import logging as stdlib_logging
+    _capture_output(monkeypatch)
+    assert stdlib_logging.getLogger("httpx").level == stdlib_logging.WARNING
+    assert stdlib_logging.getLogger("httpcore").level == stdlib_logging.WARNING
+
+
 def test_app_startup_logs_loaded_config(monkeypatch, tmp_path, capsys):
     # Minimal service + sources YAML
     service_yaml = tmp_path / "service.yaml"

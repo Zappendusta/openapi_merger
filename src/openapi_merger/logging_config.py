@@ -43,11 +43,17 @@ def configure_logging(stream: IO[str] | None = None) -> None:
     )
 
     # Route uvicorn / fastapi stdlib loggers through the same handler so they
-    # also show up in structured form. Uvicorn's own access log stays on its
-    # default formatter — we add our own request middleware in Task 4.
+    # also show up in structured form. Uvicorn's own access log uses its
+    # default formatter — per-request logging is handled by the middleware
+    # in main.py.
     logging.basicConfig(
         level=level,
         format="%(message)s",
         stream=stream or sys.stdout,
         force=True,
     )
+
+    # Silence stdlib loggers that emit unstructured lines and would pollute
+    # the logfmt stream. structlog-side events already cover what we need.
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
