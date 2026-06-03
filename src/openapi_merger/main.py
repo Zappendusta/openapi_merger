@@ -1,6 +1,8 @@
 import importlib.metadata
 import os
 import secrets
+import time
+import uuid
 from contextlib import asynccontextmanager
 
 import structlog
@@ -87,6 +89,35 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan, openapi_url=None, docs_url=None, redoc_url=None)
+
+
+@app.middleware("http")
+async def _request_log_middleware(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(request_id=request_id)
+    start = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        log.exception(
+            "request.failed",
+            method=request.method,
+            path=request.url.path,
+            duration_ms=duration_ms,
+        )
+        raise
+    duration_ms = int((time.perf_counter() - start) * 1000)
+    log.info(
+        "request.completed",
+        method=request.method,
+        path=request.url.path,
+        status=response.status_code,
+        duration_ms=duration_ms,
+    )
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 @app.get("/health")
