@@ -126,6 +126,32 @@ pip install -e ".[dev]"
 pytest
 ```
 
+## Logging
+
+The service emits structured logs to stdout. Each pipeline event is one line.
+
+Default format is **logfmt** (`key=value`) — readable in `kubectl logs` and parseable by Loki / ELK alike. Set `LOG_FORMAT=json` for pure JSON.
+
+Set `LOG_LEVEL` to one of `DEBUG`, `INFO` (default), `WARNING`, `ERROR`.
+
+Key events:
+
+| Event                             | Level   | Meaning                                              |
+|-----------------------------------|---------|------------------------------------------------------|
+| `app.startup`                     | info    | Service started, configs loaded.                     |
+| `request.completed`               | info    | HTTP request finished — includes `request_id`, status, duration. |
+| `merge.cache.hit`                 | info    | Served from in-process cache.                        |
+| `merge.cache.miss`                | info    | Cache empty or `?refresh=true` — rebuilding.          |
+| `spec.fetch.start` / `spec.fetch.ok` | info | Upstream OpenAPI fetched.                          |
+| `spec.fetch.failed`               | error   | Upstream returned non-200 or connection failed.      |
+| `spec.transform.ok`               | info    | Per-source path filter + rewrite summary.            |
+| `merge.collision.schema`          | warning | Same schema name with different content across sources — resolved by prefixing. |
+| `merge.collision.operation_id`    | warning | Same operationId with different content — resolved by prefixing. |
+| `merge.path_collision`            | error   | Duplicate path across sources — request fails 502.   |
+| `merge.build.ok` / `merge.build.failed` | info/error | Merge pipeline result.                       |
+
+Every log emitted during an HTTP request carries the same `request_id`, also returned in the `X-Request-ID` response header — copy it from a failed request to grep the pod log.
+
 ## Project structure
 
 ```
