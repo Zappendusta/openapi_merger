@@ -54,3 +54,32 @@ def test_contextvars_are_merged(monkeypatch):
     structlog.get_logger().info("request.completed", status=200)
     structlog.contextvars.clear_contextvars()
     assert "request_id=abc-123" in buf.getvalue()
+
+
+def test_app_startup_logs_loaded_config(monkeypatch, tmp_path, capsys):
+    # Minimal service + sources YAML
+    service_yaml = tmp_path / "service.yaml"
+    service_yaml.write_text(
+        "spec_path: /openapi\n"
+        "info:\n  title: t\n  version: '1'\n"
+    )
+    sources_yaml = tmp_path / "sources.yaml"
+    sources_yaml.write_text("sources: []\n")
+
+    monkeypatch.setenv("SERVICE_CONFIG", str(service_yaml))
+    monkeypatch.setenv("SOURCES_CONFIG", str(sources_yaml))
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.setenv("LOG_FORMAT", "logfmt")
+
+    import importlib
+    import openapi_merger.main as main_mod
+    importlib.reload(main_mod)
+
+    from fastapi.testclient import TestClient
+    with TestClient(main_mod.app):
+        pass
+
+    captured = capsys.readouterr()
+    assert "event=app.startup" in captured.out
+    assert "sources_count=0" in captured.out
+    assert "spec_path=/openapi" in captured.out

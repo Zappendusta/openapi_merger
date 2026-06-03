@@ -2,12 +2,16 @@ import os
 import secrets
 from contextlib import asynccontextmanager
 
+import structlog
 import yaml
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from openapi_merger.config import load_service_config, load_sources_config, ServiceConfig
+from openapi_merger.logging_config import configure_logging
 from openapi_merger.orchestrator import MergeOrchestrator
+
+log = structlog.get_logger()
 
 _security = HTTPBasic(auto_error=False)
 
@@ -23,6 +27,16 @@ async def lifespan(app: FastAPI):
     _service_config = load_service_config(svc_path)
     sources_config = load_sources_config(src_path)
     _orchestrator = MergeOrchestrator(_service_config, sources_config)
+
+    configure_logging()
+    log.info(
+        "app.startup",
+        service_config=svc_path,
+        sources_config=src_path,
+        spec_path=_service_config.spec_path,
+        sources_count=len(sources_config.sources),
+        auth_enabled=_service_config.auth is not None,
+    )
 
     async def _get_spec(
         format: str = Query("json"),
@@ -67,6 +81,7 @@ async def lifespan(app: FastAPI):
         methods=["GET"],
     )
     yield
+    log.info("app.shutdown")
 
 
 app = FastAPI(lifespan=lifespan, openapi_url=None, docs_url=None, redoc_url=None)
