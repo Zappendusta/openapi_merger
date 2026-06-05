@@ -55,6 +55,79 @@ def detect_operation_id_collisions(sources: list[Source]) -> dict[str, list[str]
     return collisions
 
 
+def assign_unique_operation_ids(sources: list[Source]) -> list[dict]:
+    """
+    Walk all operations across all sources in order and ensure every operationId
+    is globally unique. Mutates source docs in place.
+
+    Resolution strategy per conflict:
+      1. Try the source's prefix: `{prefix}{op_id}`
+      2. Still taken (or prefix is empty): append `_2`, `_3`, ... up to `_1000`.
+
+    Returns a list of rename records: {source, path, method, old, new, reason}.
+    The `reason` field is one of:
+      - "post_prefix" — the source prefix was non-empty and also collided, so a numeric suffix was used.
+      - "within_source" — the duplicate originated in the same source, and was resolved by the source prefix.
+      - "cross_source" — the duplicate originated in a different source, and was resolved by the source prefix.
+    `post_prefix` takes precedence over the other two when the prefix attempt itself failed.
+    """
+    seen: set[str] = set()
+    origin: dict[str, str] = {}
+    renames: list[dict] = []
+
+    for source_name, prefix, doc in sources:
+        for path, path_item in doc.get("paths", {}).items():
+            if not isinstance(path_item, dict):
+                continue
+            for method, operation in path_item.items():
+                if method not in HTTP_METHODS:
+                    continue
+                if not isinstance(operation, dict):
+                    continue
+                op_id = operation.get("operationId")
+                if not op_id:
+                    continue
+
+                if op_id not in seen:
+                    seen.add(op_id)
+                    origin[op_id] = source_name
+                    continue
+
+                reason = "within_source" if origin[op_id] == source_name else "cross_source"
+
+                candidate: str | None = None
+                prefixed = f"{prefix}{op_id}" if prefix else None
+                if prefixed and prefixed not in seen:
+                    candidate = prefixed
+                else:
+                    if prefixed is not None:
+                        reason = "post_prefix"
+                    for n in range(2, 1001):
+                        suffixed = f"{op_id}_{n}"
+                        if suffixed not in seen:
+                            candidate = suffixed
+                            break
+                    if candidate is None:
+                        raise RuntimeError(
+                            f"could not assign unique operationId for '{op_id}' in source '{source_name}': "
+                            f"candidates '{op_id}_2'..'{op_id}_1000' all taken"
+                        )
+
+                operation["operationId"] = candidate
+                seen.add(candidate)
+                origin[candidate] = source_name
+                renames.append({
+                    "source": source_name,
+                    "path": path,
+                    "method": method,
+                    "old": op_id,
+                    "new": candidate,
+                    "reason": reason,
+                })
+
+    return renames
+
+
 def detect_schema_collisions(sources: list[Source]) -> dict[str, list[str]]:
     """
     Returns schema_name -> [source_names] for names that appear in multiple

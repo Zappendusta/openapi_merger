@@ -1,8 +1,10 @@
+import copy
+
 import pytest
 from openapi_merger.merger import (
     rewrite_ref,
     detect_schema_collisions,
-    detect_operation_id_collisions,
+    assign_unique_operation_ids,
     merge_specs,
 )
 
@@ -90,88 +92,128 @@ def test_source_with_no_components():
     assert detect_schema_collisions(sources) == {}
 
 
-# --- detect_operation_id_collisions ---
+# --- assign_unique_operation_ids ---
 
 def _op(op_id, summary="s"):
     return {"operationId": op_id, "summary": summary, "responses": {"200": {}}}
 
 
-def test_no_op_id_collision():
+def test_assign_op_ids_no_conflicts_unchanged():
     sources = [
         ("a", "A", {"paths": {"/a": {"get": _op("listA")}}}),
         ("b", "B", {"paths": {"/b": {"get": _op("listB")}}}),
     ]
-    assert detect_operation_id_collisions(sources) == {}
+    renames = assign_unique_operation_ids(sources)
+    assert renames == []
+    assert sources[0][2]["paths"]["/a"]["get"]["operationId"] == "listA"
+    assert sources[1][2]["paths"]["/b"]["get"]["operationId"] == "listB"
 
 
-def test_equal_op_ids_same_content_not_a_collision():
-    op = _op("listFoo")
-    sources = [
-        ("a", "A", {"paths": {"/a": {"get": op}}}),
-        ("b", "B", {"paths": {"/b": {"get": op}}}),
-    ]
-    assert detect_operation_id_collisions(sources) == {}
-
-
-def test_different_content_same_op_id_is_collision():
+def test_assign_op_ids_cross_source_uses_prefix():
     sources = [
         ("a", "A", {"paths": {"/a": {"get": _op("doThing", summary="from a")}}}),
         ("b", "B", {"paths": {"/b": {"get": _op("doThing", summary="from b")}}}),
     ]
-    collisions = detect_operation_id_collisions(sources)
-    assert "doThing" in collisions
-    assert set(collisions["doThing"]) == {"a", "b"}
+    renames = assign_unique_operation_ids(sources)
+    assert sources[0][2]["paths"]["/a"]["get"]["operationId"] == "doThing"
+    assert sources[1][2]["paths"]["/b"]["get"]["operationId"] == "BdoThing"
+    assert renames == [
+        {"source": "b", "path": "/b", "method": "get", "old": "doThing", "new": "BdoThing", "reason": "cross_source"},
+    ]
 
 
-def test_op_id_collision_three_sources_one_differs():
+def test_assign_op_ids_equal_content_still_deduped():
     op = _op("doThing")
     sources = [
-        ("a", "A", {"paths": {"/a": {"get": op}}}),
-        ("b", "B", {"paths": {"/b": {"get": op}}}),
-        ("c", "C", {"paths": {"/c": {"get": _op("doThing", summary="different")}}}),
+        ("a", "A", {"paths": {"/a": {"get": copy.deepcopy(op)}}}),
+        ("b", "B", {"paths": {"/b": {"get": copy.deepcopy(op)}}}),
     ]
-    collisions = detect_operation_id_collisions(sources)
-    assert "doThing" in collisions
+    assign_unique_operation_ids(sources)
+    assert sources[0][2]["paths"]["/a"]["get"]["operationId"] == "doThing"
+    assert sources[1][2]["paths"]["/b"]["get"]["operationId"] == "BdoThing"
 
 
-def test_op_id_collision_multiple_methods():
+def test_assign_op_ids_within_source_uses_prefix():
     sources = [
-        ("a", "A", {"paths": {"/a": {
-            "get": _op("getItem", summary="a"),
-            "post": _op("createItem"),
-        }}}),
-        ("b", "B", {"paths": {"/b": {
-            "get": _op("getItem", summary="b"),
-        }}}),
+        ("a", "A", {"paths": {
+            "/x": {"get": _op("getItem", summary="first")},
+            "/y": {"get": _op("getItem", summary="second")},
+        }}),
     ]
-    collisions = detect_operation_id_collisions(sources)
-    assert "getItem" in collisions
-    assert "createItem" not in collisions
+    renames = assign_unique_operation_ids(sources)
+    assert sources[0][2]["paths"]["/x"]["get"]["operationId"] == "getItem"
+    assert sources[0][2]["paths"]["/y"]["get"]["operationId"] == "AgetItem"
+    assert len(renames) == 1
+    assert renames[0]["reason"] == "within_source"
 
 
-def test_op_id_no_operation_id_field_ignored():
+def test_assign_op_ids_post_prefix_uses_numeric_suffix():
+    sources = [
+        ("a", "A", {"paths": {
+            "/x": {"get": _op("foo", summary="a-foo")},
+            "/y": {"get": _op("Bfoo", summary="a-Bfoo")},
+        }}),
+        ("b", "B", {"paths": {"/z": {"get": _op("foo", summary="b-foo")}}}),
+    ]
+    renames = assign_unique_operation_ids(sources)
+    assert sources[0][2]["paths"]["/x"]["get"]["operationId"] == "foo"
+    assert sources[0][2]["paths"]["/y"]["get"]["operationId"] == "Bfoo"
+    assert sources[1][2]["paths"]["/z"]["get"]["operationId"] == "foo_2"
+    assert any(r["reason"] == "post_prefix" and r["new"] == "foo_2" for r in renames)
+
+
+def test_assign_op_ids_within_source_chain_uses_numeric_after_prefix():
+    sources = [
+        ("a", "A", {"paths": {
+            "/x": {"get": _op("bar", summary="1")},
+            "/y": {"get": _op("Abar", summary="2")},
+            "/z": {"get": _op("bar", summary="3")},
+        }}),
+    ]
+    assign_unique_operation_ids(sources)
+    assert sources[0][2]["paths"]["/x"]["get"]["operationId"] == "bar"
+    assert sources[0][2]["paths"]["/y"]["get"]["operationId"] == "Abar"
+    assert sources[0][2]["paths"]["/z"]["get"]["operationId"] == "bar_2"
+
+
+def test_assign_op_ids_missing_field_ignored():
     sources = [
         ("a", "A", {"paths": {"/a": {"get": {"responses": {"200": {}}}}}}),
         ("b", "B", {"paths": {"/b": {"get": {"responses": {"200": {}}}}}}),
     ]
-    assert detect_operation_id_collisions(sources) == {}
+    renames = assign_unique_operation_ids(sources)
+    assert renames == []
+    assert "operationId" not in sources[0][2]["paths"]["/a"]["get"]
+    assert "operationId" not in sources[1][2]["paths"]["/b"]["get"]
 
 
-def test_op_id_source_with_no_paths():
+def test_assign_op_ids_non_method_keys_ignored():
+    sources = [
+        ("a", "A", {"paths": {"/a": {"get": _op("getA"), "parameters": [], "summary": "x"}}}),
+    ]
+    renames = assign_unique_operation_ids(sources)
+    assert renames == []
+    assert sources[0][2]["paths"]["/a"]["get"]["operationId"] == "getA"
+
+
+def test_assign_op_ids_no_paths_ok():
     sources = [
         ("a", "A", {"components": {}}),
         ("b", "B", {"paths": {"/b": {"get": _op("listB")}}}),
     ]
-    assert detect_operation_id_collisions(sources) == {}
+    renames = assign_unique_operation_ids(sources)
+    assert renames == []
+    assert sources[1][2]["paths"]["/b"]["get"]["operationId"] == "listB"
 
 
-def test_non_method_keys_in_path_item_ignored():
-    # 'parameters' and 'summary' are valid path-item keys, not operations
-    sources = [
-        ("a", "A", {"paths": {"/a": {"get": _op("getA"), "parameters": [], "summary": "x"}}}),
-        ("b", "B", {"paths": {"/b": {"get": _op("getB")}}}),
-    ]
-    assert detect_operation_id_collisions(sources) == {}
+def test_assign_op_ids_numeric_suffix_overflow_raises():
+    paths = {"/p0": {"get": _op("foo", summary="first")}}
+    for i in range(2, 1001):
+        paths[f"/p{i}"] = {"get": _op(f"foo_{i}", summary=str(i))}
+    paths["/dup"] = {"get": _op("foo", summary="trigger overflow")}
+    sources = [("a", "", {"paths": paths})]
+    with pytest.raises(RuntimeError, match="could not assign unique operationId"):
+        assign_unique_operation_ids(sources)
 
 
 # --- merge_specs ---
