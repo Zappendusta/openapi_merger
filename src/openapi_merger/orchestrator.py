@@ -25,6 +25,11 @@ class MergeOrchestrator:
         self._cache = await self._build()
         return self._cache
 
+    def clear_cache(self) -> None:
+        had_cache = self._cache is not None
+        self._cache = None
+        log.info("merge.cache.clear", had_cache=had_cache)
+
     async def _build(self) -> dict:
         log.info(
             "merge.build.start",

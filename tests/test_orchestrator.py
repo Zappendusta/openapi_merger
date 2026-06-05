@@ -125,3 +125,30 @@ async def test_discard_paths_excluded():
     merged = await o.get_merged()
     assert "/internal/secret" not in merged["paths"]
     assert "/api/users" in merged["paths"]
+
+
+@respx.mock
+async def test_clear_cache_forces_rebuild():
+    respx.get("http://users/openapi.json").mock(
+        return_value=httpx.Response(200, json=_SPEC_A)
+    )
+    respx.get("http://orders/openapi.json").mock(
+        return_value=httpx.Response(200, json=_SPEC_B)
+    )
+    orch = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG)
+
+    await orch.get_merged()
+    assert respx.calls.call_count == 2
+
+    orch.clear_cache()
+    assert orch._cache is None
+
+    await orch.get_merged()
+    assert respx.calls.call_count == 4
+
+
+def test_clear_cache_is_noop_when_empty():
+    orch = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG)
+    assert orch._cache is None
+    orch.clear_cache()
+    assert orch._cache is None
