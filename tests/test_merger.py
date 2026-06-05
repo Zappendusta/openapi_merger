@@ -44,6 +44,74 @@ def test_rewrite_ref_non_schema_ref_untouched():
     assert rewrite_ref(doc, "Error", "NewError") == {"$ref": "#/components/responses/Error"}
 
 
+def test_rewrite_ref_discriminator_mapping_full_ref():
+    doc = {
+        "discriminator": {
+            "propertyName": "type",
+            "mapping": {
+                "internal": "#/components/schemas/InternalContact",
+                "external": "#/components/schemas/ExternalContact",
+            },
+        }
+    }
+    result = rewrite_ref(doc, "InternalContact", "ContactApiInternalContact")
+    assert result["discriminator"]["mapping"]["internal"] == "#/components/schemas/ContactApiInternalContact"
+    assert result["discriminator"]["mapping"]["external"] == "#/components/schemas/ExternalContact"
+
+
+def test_rewrite_ref_discriminator_mapping_bare_name():
+    doc = {
+        "discriminator": {
+            "propertyName": "type",
+            "mapping": {
+                "internal": "InternalContact",
+                "external": "ExternalContact",
+            },
+        }
+    }
+    result = rewrite_ref(doc, "InternalContact", "ContactApiInternalContact")
+    assert result["discriminator"]["mapping"]["internal"] == "ContactApiInternalContact"
+    assert result["discriminator"]["mapping"]["external"] == "ExternalContact"
+
+
+def test_rewrite_ref_discriminator_without_mapping_untouched():
+    doc = {"discriminator": {"propertyName": "type"}}
+    assert rewrite_ref(doc, "InternalContact", "X") == {"discriminator": {"propertyName": "type"}}
+
+
+def test_rewrite_ref_mapping_outside_discriminator_untouched():
+    # A schema named "mapping" or a custom property named "mapping" must not be touched.
+    doc = {"properties": {"mapping": {"type": "object", "example": {"key": "InternalContact"}}}}
+    assert rewrite_ref(doc, "InternalContact", "X") == doc
+
+
+def test_rewrite_ref_discriminator_mapping_nested_inside_schema():
+    doc = {
+        "components": {
+            "schemas": {
+                "Contact": {
+                    "oneOf": [
+                        {"$ref": "#/components/schemas/InternalContact"},
+                        {"$ref": "#/components/schemas/ExternalContact"},
+                    ],
+                    "discriminator": {
+                        "propertyName": "type",
+                        "mapping": {
+                            "internal": "#/components/schemas/InternalContact",
+                            "external": "ExternalContact",
+                        },
+                    },
+                }
+            }
+        }
+    }
+    result = rewrite_ref(doc, "InternalContact", "ContactApiInternalContact")
+    contact = result["components"]["schemas"]["Contact"]
+    assert contact["oneOf"][0]["$ref"] == "#/components/schemas/ContactApiInternalContact"
+    assert contact["discriminator"]["mapping"]["internal"] == "#/components/schemas/ContactApiInternalContact"
+    assert contact["discriminator"]["mapping"]["external"] == "ExternalContact"
+
+
 # --- detect_schema_collisions ---
 
 def test_no_collision():
@@ -279,6 +347,45 @@ def test_merge_collision_resolved_with_prefix():
         ["content"]["application/json"]["schema"]["$ref"]
     )
     assert ref == "#/components/schemas/AFoo"
+
+
+def test_merge_collision_rewrites_discriminator_mapping():
+    # Source 'a' defines a polymorphic Contact whose mapping points at InternalContact.
+    # Source 'b' defines a colliding InternalContact, forcing 'a's InternalContact to be
+    # renamed via the schema_prefix. The discriminator.mapping must follow the rename.
+    source_a = _doc(
+        {"/a": {}},
+        {
+            "Contact": {
+                "oneOf": [{"$ref": "#/components/schemas/InternalContact"}],
+                "discriminator": {
+                    "propertyName": "type",
+                    "mapping": {
+                        "internal_ref": "#/components/schemas/InternalContact",
+                        "internal_bare": "InternalContact",
+                    },
+                },
+            },
+            "InternalContact": {"type": "object", "properties": {"id": {"type": "string"}}},
+        },
+    )
+    source_b = _doc(
+        {"/b": {}},
+        {"InternalContact": {"type": "object", "properties": {"id": {"type": "integer"}}}},
+    )
+    merged = merge_specs(
+        [("a", "ContactApi", source_a), ("b", "UserApi", source_b)],
+        title="T",
+        version="1",
+    )
+    schemas = merged["components"]["schemas"]
+    assert "ContactApiInternalContact" in schemas
+    assert "UserApiInternalContact" in schemas
+    assert "InternalContact" not in schemas
+    mapping = schemas["Contact"]["discriminator"]["mapping"]
+    assert mapping["internal_ref"] == "#/components/schemas/ContactApiInternalContact"
+    assert mapping["internal_bare"] == "ContactApiInternalContact"
+    assert schemas["Contact"]["oneOf"][0]["$ref"] == "#/components/schemas/ContactApiInternalContact"
 
 
 def test_merge_path_collision_raises():

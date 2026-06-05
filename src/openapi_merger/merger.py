@@ -10,17 +10,38 @@ Source = tuple[str, str, dict]  # (name, schema_prefix, doc)
 
 
 def rewrite_ref(node, old_name: str, new_name: str):
-    """Recursively rewrite $ref values for a specific schema name."""
+    """Recursively rewrite references to a renamed schema.
+
+    Handles both `$ref` strings and `discriminator.mapping` values. The mapping
+    entries may be full refs (`#/components/schemas/Foo`) or bare schema names
+    (`Foo`); both forms are rewritten.
+    """
     old_ref = f"#/components/schemas/{old_name}"
     new_ref = f"#/components/schemas/{new_name}"
     if isinstance(node, dict):
-        return {
-            k: (new_ref if k == "$ref" and v == old_ref else rewrite_ref(v, old_name, new_name))
-            for k, v in node.items()
-        }
+        result = {}
+        for k, v in node.items():
+            if k == "$ref" and v == old_ref:
+                result[k] = new_ref
+            elif k == "discriminator" and isinstance(v, dict):
+                result[k] = _rewrite_discriminator(v, old_name, new_name, old_ref, new_ref)
+            else:
+                result[k] = rewrite_ref(v, old_name, new_name)
+        return result
     if isinstance(node, list):
         return [rewrite_ref(item, old_name, new_name) for item in node]
     return node
+
+
+def _rewrite_discriminator(disc: dict, old_name: str, new_name: str, old_ref: str, new_ref: str) -> dict:
+    out = dict(disc)
+    mapping = disc.get("mapping")
+    if isinstance(mapping, dict):
+        out["mapping"] = {
+            k: (new_ref if v == old_ref else new_name if v == old_name else v)
+            for k, v in mapping.items()
+        }
+    return out
 
 
 HTTP_METHODS = {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
