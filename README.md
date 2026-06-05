@@ -93,10 +93,11 @@ sources:
 
 ## API
 
-| Method | Path              | Description                                      |
-|--------|-------------------|--------------------------------------------------|
-| GET    | `<spec_path>`     | Returns the merged OpenAPI spec                  |
-| GET    | `/health`         | Health check — returns `{"status": "ok"}`        |
+| Method | Path                   | Description                                      |
+|--------|------------------------|--------------------------------------------------|
+| GET    | `<spec_path>`          | Returns the merged OpenAPI spec                  |
+| GET    | `/health`              | Health check — returns `{"status": "ok"}`        |
+| POST   | `/admin/cache/clear`   | Invalidate the in-memory merged-spec cache. Returns 204. Auth-protected when `auth` is configured. Next GET on the spec endpoint rebuilds from upstreams. |
 
 ### Query parameters for the spec endpoint
 
@@ -143,6 +144,7 @@ Key events:
 | `request.completed`               | info    | HTTP request finished — includes `request_id`, status, duration. |
 | `merge.cache.hit`                 | info    | Served from in-process cache.                        |
 | `merge.cache.miss`                | info    | Cache empty or `?refresh=true` — rebuilding.          |
+| `merge.cache.clear`               | info    | `POST /admin/cache/clear` invalidated the cache; `had_cache` indicates whether a cached value was discarded. |
 | `spec.fetch.start` / `spec.fetch.ok` | info | Upstream OpenAPI fetched.                          |
 | `spec.fetch.failed`               | error   | Upstream returned non-200 or connection failed.      |
 | `spec.transform.ok`               | info    | Per-source path filter + rewrite summary.            |
