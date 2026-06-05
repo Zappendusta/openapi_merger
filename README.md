@@ -146,7 +146,7 @@ Key events:
 | `spec.fetch.failed`               | error   | Upstream returned non-200 or connection failed.      |
 | `spec.transform.ok`               | info    | Per-source path filter + rewrite summary.            |
 | `merge.collision.schema`          | warning | Same schema name with different content across sources — resolved by prefixing. |
-| `merge.collision.operation_id`    | warning | Same operationId with different content — resolved by prefixing. |
+| `merge.collision.operation_id`    | warning | Duplicate operationId — resolved by source prefix or numeric suffix. `reason` field: `within_source`, `cross_source`, or `post_prefix`. |
 | `merge.path_collision`            | error   | Duplicate path across sources — request fails 502.   |
 | `merge.build.ok` / `merge.build.failed` | info/error | Merge pipeline result.                       |
 
