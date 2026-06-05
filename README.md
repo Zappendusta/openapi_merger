@@ -138,6 +138,7 @@ Key events:
 
 | Event                             | Level   | Meaning                                              |
 |-----------------------------------|---------|------------------------------------------------------|
+| `app.build_info`                  | info    | One-shot startup banner: version, git SHA/branch, build time, Python, platform, hostname, PID, dependency versions. |
 | `app.startup`                     | info    | Service started, configs loaded.                     |
 | `request.completed`               | info    | HTTP request finished — includes `request_id`, status, duration. |
 | `merge.cache.hit`                 | info    | Served from in-process cache.                        |
@@ -199,3 +200,17 @@ GitHub Actions workflow (`.github/workflows/docker-publish.yml`):
 2. On push to `master` or a `v*.*.*` tag: builds and pushes to GHCR.
 
 Image tags produced: `latest` (master), `sha-<short>`, semver `vX.Y.Z` / `vX.Y`.
+
+### Baking build metadata into the image
+
+Build args `BUILD_GIT_SHA`, `BUILD_GIT_BRANCH`, and `BUILD_TIME` are surfaced at container startup via the `app.build_info` log event. For a local build:
+
+```bash
+docker build \
+  --build-arg BUILD_GIT_SHA=$(git rev-parse HEAD) \
+  --build-arg BUILD_GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD) \
+  --build-arg BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  -t openapi_merger:dev .
+```
+
+The CI workflow passes these automatically.

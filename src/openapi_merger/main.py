@@ -11,6 +11,7 @@ import yaml
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
+from openapi_merger.build_info import collect_build_info
 from openapi_merger.config import load_service_config, load_sources_config, ServiceConfig
 from openapi_merger.logging_config import configure_logging
 from openapi_merger.orchestrator import MergeOrchestrator
@@ -37,6 +38,7 @@ _orchestrator: MergeOrchestrator | None = None
 async def lifespan(app: FastAPI):
     global _service_config, _orchestrator
     configure_logging()
+    log.info("app.build_info", **collect_build_info())
     svc_path = os.getenv("SERVICE_CONFIG", "/config/service.yaml")
     src_path = os.getenv("SOURCES_CONFIG", "/config/sources.yaml")
     _service_config = load_service_config(svc_path)
