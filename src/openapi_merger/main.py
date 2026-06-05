@@ -97,6 +97,32 @@ async def lifespan(app: FastAPI):
         _get_spec,
         methods=["GET"],
     )
+
+    async def _clear_cache(
+        credentials: HTTPBasicCredentials | None = Depends(_security),
+    ):
+        if _service_config.auth:
+            if credentials is None:
+                raise HTTPException(
+                    status_code=401,
+                    headers={"WWW-Authenticate": "Basic"},
+                )
+            valid = secrets.compare_digest(
+                credentials.username, _service_config.auth.username
+            ) and secrets.compare_digest(
+                credentials.password, _service_config.auth.password
+            )
+            if not valid:
+                raise HTTPException(status_code=401)
+
+        _orchestrator.clear_cache()
+        return Response(status_code=204)
+
+    app.add_api_route(
+        "/admin/cache/clear",
+        _clear_cache,
+        methods=["POST"],
+    )
     yield
     log.info("app.shutdown")
 

@@ -149,3 +149,46 @@ def test_auth_passes_with_correct_credentials(auth_client):
 def test_auth_fails_with_wrong_credentials(auth_client):
     r = auth_client.get("/openapi.json", auth=("admin", "wrong"))
     assert r.status_code == 401
+
+
+@respx.mock
+def test_clear_cache_returns_204_without_auth(client):
+    respx.get("http://users/openapi.json").mock(
+        return_value=httpx.Response(200, json=_SPEC_A)
+    )
+    respx.get("http://orders/openapi.json").mock(
+        return_value=httpx.Response(200, json=_SPEC_B)
+    )
+
+    client.get("/openapi.json")
+    assert respx.calls.call_count == 2
+
+    r = client.post("/admin/cache/clear")
+    assert r.status_code == 204
+    assert r.content == b""
+
+    client.get("/openapi.json")
+    assert respx.calls.call_count == 4
+
+
+def test_clear_cache_rejects_get(client):
+    r = client.get("/admin/cache/clear")
+    assert r.status_code == 405
+
+
+@respx.mock
+def test_clear_cache_requires_auth_when_configured(auth_client):
+    r = auth_client.post("/admin/cache/clear")
+    assert r.status_code == 401
+
+
+@respx.mock
+def test_clear_cache_accepts_correct_credentials(auth_client):
+    r = auth_client.post("/admin/cache/clear", auth=("admin", "secret"))
+    assert r.status_code == 204
+
+
+@respx.mock
+def test_clear_cache_rejects_wrong_credentials(auth_client):
+    r = auth_client.post("/admin/cache/clear", auth=("admin", "wrong"))
+    assert r.status_code == 401
