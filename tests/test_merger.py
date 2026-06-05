@@ -331,27 +331,27 @@ def test_merge_op_id_collision_resolved_with_prefix():
         ("b", "B", _doc_with_op("/b", "get", "doThing", summary="from b")),
     ]
     merged = merge_specs(sources, title="T", version="1")
-    assert merged["paths"]["/a"]["get"]["operationId"] == "AdoThing"
+    assert merged["paths"]["/a"]["get"]["operationId"] == "doThing"
     assert merged["paths"]["/b"]["get"]["operationId"] == "BdoThing"
 
 
-def test_merge_equal_op_ids_not_prefixed():
+def test_merge_equal_op_ids_now_deduped():
     op_def = {"operationId": "doThing", "summary": "same", "responses": {"200": {}}}
     sources = [
         ("a", "A", {
             "openapi": "3.0.0", "info": {"title": "T", "version": "1"},
-            "paths": {"/a": {"get": op_def}},
+            "paths": {"/a": {"get": copy.deepcopy(op_def)}},
             "components": {"schemas": {}},
         }),
         ("b", "B", {
             "openapi": "3.0.0", "info": {"title": "T", "version": "1"},
-            "paths": {"/b": {"get": op_def}},
+            "paths": {"/b": {"get": copy.deepcopy(op_def)}},
             "components": {"schemas": {}},
         }),
     ]
     merged = merge_specs(sources, title="T", version="1")
     assert merged["paths"]["/a"]["get"]["operationId"] == "doThing"
-    assert merged["paths"]["/b"]["get"]["operationId"] == "doThing"
+    assert merged["paths"]["/b"]["get"]["operationId"] == "BdoThing"
 
 
 def test_merge_op_id_collision_multiple_methods():
@@ -373,6 +373,52 @@ def test_merge_op_id_collision_multiple_methods():
         }),
     ]
     merged = merge_specs(sources, title="T", version="1")
-    assert merged["paths"]["/a"]["get"]["operationId"] == "AgetItem"
+    assert merged["paths"]["/a"]["get"]["operationId"] == "getItem"
     assert merged["paths"]["/b"]["get"]["operationId"] == "BgetItem"
-    assert merged["paths"]["/a"]["post"]["operationId"] == "createItem"  # no collision
+    assert merged["paths"]["/a"]["post"]["operationId"] == "createItem"
+
+
+def test_merge_within_source_op_id_collision_resolved():
+    sources = [
+        ("a", "A", {
+            "openapi": "3.0.0", "info": {"title": "T", "version": "1"},
+            "paths": {
+                "/x": {"get": {"operationId": "getItem", "summary": "1", "responses": {"200": {}}}},
+                "/y": {"get": {"operationId": "getItem", "summary": "2", "responses": {"200": {}}}},
+            },
+            "components": {"schemas": {}},
+        }),
+    ]
+    merged = merge_specs(sources, title="T", version="1")
+    assert merged["paths"]["/x"]["get"]["operationId"] == "getItem"
+    assert merged["paths"]["/y"]["get"]["operationId"] == "AgetItem"
+
+
+def test_merge_all_op_ids_unique_in_output():
+    sources = [
+        ("a", "A", {
+            "openapi": "3.0.0", "info": {"title": "T", "version": "1"},
+            "paths": {
+                "/x": {"get": {"operationId": "dup", "summary": "ax", "responses": {"200": {}}}},
+                "/y": {"get": {"operationId": "dup", "summary": "ay", "responses": {"200": {}}}},
+            },
+            "components": {"schemas": {}},
+        }),
+        ("b", "B", {
+            "openapi": "3.0.0", "info": {"title": "T", "version": "1"},
+            "paths": {
+                "/z": {"get": {"operationId": "dup", "summary": "bz", "responses": {"200": {}}}},
+            },
+            "components": {"schemas": {}},
+        }),
+    ]
+    merged = merge_specs(sources, title="T", version="1")
+    op_ids = [
+        op["operationId"]
+        for path_item in merged["paths"].values()
+        for method, op in path_item.items()
+        if method in {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
+        and isinstance(op, dict)
+        and "operationId" in op
+    ]
+    assert len(op_ids) == len(set(op_ids)), f"duplicate operationIds in merged output: {op_ids}"

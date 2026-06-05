@@ -26,35 +26,6 @@ def rewrite_ref(node, old_name: str, new_name: str):
 HTTP_METHODS = {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
 
 
-def detect_operation_id_collisions(sources: list[Source]) -> dict[str, list[str]]:
-    """
-    Returns operationId -> [source_names] for IDs that appear in multiple
-    sources with different operation content. Equal-content duplicates are not
-    collisions (mirrors detect_schema_collisions behaviour).
-    """
-    op_map: dict[str, list[tuple[str, dict]]] = {}
-    for source_name, _prefix, doc in sources:
-        for _path, path_item in doc.get("paths", {}).items():
-            for method, operation in path_item.items():
-                if method not in HTTP_METHODS:
-                    continue
-                if not isinstance(operation, dict):
-                    continue
-                op_id = operation.get("operationId")
-                if op_id:
-                    op_map.setdefault(op_id, []).append((source_name, operation))
-
-    collisions: dict[str, list[str]] = {}
-    for op_id, entries in op_map.items():
-        if len(entries) <= 1:
-            continue
-        first = entries[0][1]
-        if all(e[1] == first for e in entries[1:]):
-            continue  # all equal: not a collision
-        collisions[op_id] = [e[0] for e in entries]
-    return collisions
-
-
 def assign_unique_operation_ids(sources: list[Source]) -> list[dict]:
     """
     Walk all operations across all sources in order and ensure every operationId
@@ -151,7 +122,6 @@ def detect_schema_collisions(sources: list[Source]) -> dict[str, list[str]]:
 
 def merge_specs(sources: list[Source], title: str, version: str) -> dict:
     collisions = detect_schema_collisions(sources)
-    op_collisions = detect_operation_id_collisions(sources)
 
     for name, sources_with_name in collisions.items():
         log.warning(
@@ -160,21 +130,11 @@ def merge_specs(sources: list[Source], title: str, version: str) -> dict:
             sources=sources_with_name,
             resolution="prefix",
         )
-    for op_id, sources_with_op in op_collisions.items():
-        log.warning(
-            "merge.collision.operation_id",
-            operation_id=op_id,
-            sources=sources_with_op,
-            resolution="prefix",
-        )
 
-    # Apply prefix only to colliding schema names (and their $refs) per source,
-    # and to colliding operationIds per source.
+    # Apply schema prefix and $ref rewrites per source.
     processed: list[Source] = []
     for source_name, prefix, doc in sources:
         doc = copy.deepcopy(doc)
-
-        # --- Schema collision resolution (unchanged) ---
         colliding_schemas = [
             name for name, names in collisions.items() if source_name in names
         ]
@@ -184,19 +144,21 @@ def merge_specs(sources: list[Source], title: str, version: str) -> dict:
             if name in schemas:
                 schemas[new_name] = schemas.pop(name)
             doc = rewrite_ref(doc, name, new_name)
-
-        # --- Operation ID collision resolution ---
-        colliding_op_ids = {
-            op_id for op_id, names in op_collisions.items() if source_name in names
-        }
-        for path_item in doc.get("paths", {}).values():
-            for method, operation in path_item.items():
-                if method not in HTTP_METHODS:
-                    continue
-                if isinstance(operation, dict) and operation.get("operationId") in colliding_op_ids:
-                    operation["operationId"] = f"{prefix}{operation['operationId']}"
-
         processed.append((source_name, prefix, doc))
+
+    # Resolve operationIds globally across the full processed set, mutating in place.
+    renames = assign_unique_operation_ids(processed)
+    for r in renames:
+        log.warning(
+            "merge.collision.operation_id",
+            operation_id=r["old"],
+            new_operation_id=r["new"],
+            source=r["source"],
+            path=r["path"],
+            method=r["method"],
+            reason=r["reason"],
+            resolution="prefix" if r["reason"] in {"within_source", "cross_source"} else "numeric_suffix",
+        )
 
     # Merge paths — error on duplicates
     merged_paths: dict = {}
