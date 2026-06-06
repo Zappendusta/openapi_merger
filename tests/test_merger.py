@@ -584,3 +584,85 @@ def test_merge_all_op_ids_unique_in_output():
         and "operationId" in op
     ]
     assert len(op_ids) == len(set(op_ids)), f"duplicate operationIds in merged output: {op_ids}"
+
+
+# --- rewrite_security_scheme_name ---
+
+from openapi_merger.merger import rewrite_security_scheme_name
+
+
+def test_rewrite_sec_in_document_level_security():
+    doc = {"security": [{"BearerAuth": []}, {"ApiKey": ["read"]}]}
+    result = rewrite_security_scheme_name(doc, "BearerAuth", "AuthApiBearerAuth")
+    assert result["security"] == [
+        {"AuthApiBearerAuth": []},
+        {"ApiKey": ["read"]},
+    ]
+
+
+def test_rewrite_sec_in_operation_security():
+    doc = {
+        "paths": {
+            "/x": {
+                "get": {
+                    "operationId": "getX",
+                    "security": [{"BearerAuth": []}],
+                    "responses": {"200": {}},
+                }
+            }
+        }
+    }
+    result = rewrite_security_scheme_name(doc, "BearerAuth", "AuthApiBearerAuth")
+    assert result["paths"]["/x"]["get"]["security"] == [{"AuthApiBearerAuth": []}]
+
+
+def test_rewrite_sec_renames_components_security_schemes_key():
+    doc = {
+        "components": {
+            "securitySchemes": {
+                "BearerAuth": {"type": "http", "scheme": "bearer"},
+                "ApiKey": {"type": "apiKey", "in": "header", "name": "X-Key"},
+            }
+        }
+    }
+    result = rewrite_security_scheme_name(doc, "BearerAuth", "AuthApiBearerAuth")
+    schemes = result["components"]["securitySchemes"]
+    assert "AuthApiBearerAuth" in schemes
+    assert "BearerAuth" not in schemes
+    assert schemes["AuthApiBearerAuth"] == {"type": "http", "scheme": "bearer"}
+    assert "ApiKey" in schemes
+
+
+def test_rewrite_sec_leaves_non_matching_keys_alone():
+    doc = {"security": [{"ApiKey": []}]}
+    result = rewrite_security_scheme_name(doc, "BearerAuth", "AuthApiBearerAuth")
+    assert result == {"security": [{"ApiKey": []}]}
+
+
+def test_rewrite_sec_empty_security_list_untouched():
+    # An empty list means "explicitly no auth"; must remain empty.
+    doc = {"paths": {"/x": {"get": {"security": [], "responses": {"200": {}}}}}}
+    result = rewrite_security_scheme_name(doc, "BearerAuth", "AuthApiBearerAuth")
+    assert result["paths"]["/x"]["get"]["security"] == []
+
+
+def test_rewrite_sec_does_not_touch_unrelated_keys_named_security():
+    # A schema property literally named "security" must not have its keys rewritten.
+    doc = {
+        "components": {
+            "schemas": {
+                "Config": {
+                    "type": "object",
+                    "properties": {
+                        "security": {"type": "string", "example": "BearerAuth"}
+                    },
+                }
+            }
+        }
+    }
+    result = rewrite_security_scheme_name(doc, "BearerAuth", "AuthApiBearerAuth")
+    # The string "BearerAuth" inside an example must be untouched.
+    assert (
+        result["components"]["schemas"]["Config"]["properties"]["security"]["example"]
+        == "BearerAuth"
+    )

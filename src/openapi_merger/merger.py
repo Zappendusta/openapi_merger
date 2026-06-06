@@ -47,6 +47,58 @@ def _rewrite_discriminator(disc: dict, old_name: str, new_name: str, old_ref: st
 HTTP_METHODS = {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
 
 
+def rewrite_security_scheme_name(doc: dict, old_name: str, new_name: str) -> dict:
+    """Rename a securityScheme from `old_name` to `new_name` everywhere it is
+    referenced.
+
+    Security requirements reference schemes **by key name**, not via $ref, so this
+    is a structural walker — not a generic name replacer. It touches exactly three
+    locations:
+
+      1. ``doc["security"]``                              — list of requirement objects.
+      2. ``doc["paths"][p][method]["security"]``          — per-operation requirements.
+      3. ``doc["components"]["securitySchemes"][name]``   — the scheme definition itself.
+
+    Anything else (schema properties literally named ``security``, string examples
+    containing the scheme name, etc.) is left untouched. The doc is mutated in
+    place and also returned for convenience.
+    """
+    if "security" in doc and isinstance(doc["security"], list):
+        doc["security"] = [_rename_requirement(req, old_name, new_name) for req in doc["security"]]
+
+    paths = doc.get("paths")
+    if isinstance(paths, dict):
+        for _path, path_item in paths.items():
+            if not isinstance(path_item, dict):
+                continue
+            for method, operation in path_item.items():
+                if method not in HTTP_METHODS or not isinstance(operation, dict):
+                    continue
+                if "security" in operation and isinstance(operation["security"], list):
+                    operation["security"] = [
+                        _rename_requirement(req, old_name, new_name)
+                        for req in operation["security"]
+                    ]
+
+    schemes = doc.get("components", {}).get("securitySchemes")
+    if isinstance(schemes, dict) and old_name in schemes:
+        schemes[new_name] = schemes.pop(old_name)
+
+    return doc
+
+
+def _rename_requirement(req: dict, old_name: str, new_name: str) -> dict:
+    if not isinstance(req, dict) or old_name not in req:
+        return req
+    out = {}
+    for k, v in req.items():
+        if k == old_name:
+            out[new_name] = v
+        else:
+            out[k] = v
+    return out
+
+
 def assign_unique_operation_ids(sources: list[Source]) -> list[dict]:
     """
     Walk all operations across all sources in order and ensure every operationId
