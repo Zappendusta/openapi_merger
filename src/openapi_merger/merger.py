@@ -278,12 +278,23 @@ def merge_specs(sources: list[Source], title: str, version: str) -> dict:
             if name not in merged_schemas:
                 merged_schemas[name] = schema
 
+    # Merge securitySchemes — equal duplicates are silently deduped.
+    # Collisions of differing content are resolved by Task 4 via source-prefix renaming,
+    # so any remaining same-name entries are content-equal by construction.
+    merged_security_schemes: dict = {}
+    for _source_name, _prefix, doc in processed:
+        for name, scheme in doc.get("components", {}).get("securitySchemes", {}).items():
+            if name not in merged_security_schemes:
+                merged_security_schemes[name] = scheme
+
     # Merge other component sub-objects
     other_component_keys = {
         "responses", "parameters", "requestBodies",
         "headers", "examples", "links", "callbacks",
     }
     merged_components: dict = {"schemas": merged_schemas}
+    if merged_security_schemes:
+        merged_components["securitySchemes"] = merged_security_schemes
     for _source_name, _prefix, doc in processed:
         for key in other_component_keys:
             items = doc.get("components", {}).get(key, {})

@@ -666,3 +666,95 @@ def test_rewrite_sec_does_not_touch_unrelated_keys_named_security():
         result["components"]["schemas"]["Config"]["properties"]["security"]["example"]
         == "BearerAuth"
     )
+
+
+# --- merge_specs: securitySchemes ---
+
+def test_merge_security_schemes_from_single_source_carried_through():
+    sources = [
+        (
+            "a",
+            "A",
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "T", "version": "1"},
+                "paths": {"/a": {}},
+                "components": {
+                    "schemas": {},
+                    "securitySchemes": {
+                        "BearerAuth": {"type": "http", "scheme": "bearer"}
+                    },
+                },
+            },
+        ),
+    ]
+    merged = merge_specs(sources, title="T", version="1")
+    assert merged["components"]["securitySchemes"]["BearerAuth"] == {
+        "type": "http",
+        "scheme": "bearer",
+    }
+
+
+def test_merge_security_schemes_equal_dedup():
+    scheme = {"type": "http", "scheme": "bearer"}
+    sources = [
+        (
+            "a",
+            "A",
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "T", "version": "1"},
+                "paths": {"/a": {}},
+                "components": {"schemas": {}, "securitySchemes": {"BearerAuth": scheme}},
+            },
+        ),
+        (
+            "b",
+            "B",
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "T", "version": "1"},
+                "paths": {"/b": {}},
+                "components": {"schemas": {}, "securitySchemes": {"BearerAuth": scheme}},
+            },
+        ),
+    ]
+    merged = merge_specs(sources, title="T", version="1")
+    assert list(merged["components"]["securitySchemes"].keys()) == ["BearerAuth"]
+
+
+def test_merge_security_schemes_distinct_names_carried_through():
+    sources = [
+        (
+            "a",
+            "A",
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "T", "version": "1"},
+                "paths": {"/a": {}},
+                "components": {
+                    "schemas": {},
+                    "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "bearer"}},
+                },
+            },
+        ),
+        (
+            "b",
+            "B",
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "T", "version": "1"},
+                "paths": {"/b": {}},
+                "components": {
+                    "schemas": {},
+                    "securitySchemes": {
+                        "ApiKey": {"type": "apiKey", "in": "header", "name": "X-Key"}
+                    },
+                },
+            },
+        ),
+    ]
+    merged = merge_specs(sources, title="T", version="1")
+    schemes = merged["components"]["securitySchemes"]
+    assert "BearerAuth" in schemes
+    assert "ApiKey" in schemes
