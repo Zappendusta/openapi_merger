@@ -322,9 +322,21 @@ def merge_specs(sources: list[Source], title: str, version: str) -> dict:
         (doc.get("openapi", "3.0.0") for _, _, doc in processed), "3.0.0"
     )
 
-    return {
+    # Merge document-level `security` lists across sources, preserving order and
+    # removing exact-duplicate requirement objects. Operation-level security is
+    # already carried through paths.
+    merged_security: list[dict] = []
+    for _source_name, _prefix, doc in processed:
+        for requirement in doc.get("security", []) or []:
+            if requirement not in merged_security:
+                merged_security.append(requirement)
+
+    result: dict = {
         "openapi": openapi_version,
         "info": {"title": title, "version": version},
         "paths": merged_paths,
         "components": merged_components,
     }
+    if merged_security:
+        result["security"] = merged_security
+    return result

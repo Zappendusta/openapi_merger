@@ -839,3 +839,77 @@ def test_merge_security_scheme_collision_rewrites_document_level_security():
     assert {"AuthApiBearerAuth": []} in merged["security"]
     assert {"UserApiBearerAuth": []} in merged["security"]
     assert {"BearerAuth": []} not in merged["security"]
+
+
+# --- merge_specs: document-level security ---
+
+def test_merge_document_security_from_single_source_carried_through():
+    sources = [
+        (
+            "a",
+            "A",
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "T", "version": "1"},
+                "security": [{"BearerAuth": []}],
+                "paths": {"/a": {}},
+                "components": {
+                    "schemas": {},
+                    "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "bearer"}},
+                },
+            },
+        ),
+    ]
+    merged = merge_specs(sources, title="T", version="1")
+    assert merged["security"] == [{"BearerAuth": []}]
+
+
+def test_merge_document_security_concatenated_and_deduped():
+    sources = [
+        (
+            "a",
+            "A",
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "T", "version": "1"},
+                "security": [{"BearerAuth": []}, {"ApiKey": ["read"]}],
+                "paths": {"/a": {}},
+                "components": {"schemas": {}},
+            },
+        ),
+        (
+            "b",
+            "B",
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "T", "version": "1"},
+                "security": [{"ApiKey": ["read"]}, {"OAuth": ["scope1"]}],
+                "paths": {"/b": {}},
+                "components": {"schemas": {}},
+            },
+        ),
+    ]
+    merged = merge_specs(sources, title="T", version="1")
+    # Source order preserved; duplicates removed; first occurrence wins.
+    assert merged["security"] == [
+        {"BearerAuth": []},
+        {"ApiKey": ["read"]},
+        {"OAuth": ["scope1"]},
+    ]
+
+
+def test_merge_document_security_absent_when_no_source_defines_it():
+    sources = [
+        (
+            "a",
+            "A",
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "T", "version": "1"},
+                "paths": {"/a": {}},
+                "components": {"schemas": {}},
+            },
+        ),
+    ]
+    merged = merge_specs(sources, title="T", version="1")
+    assert "security" not in merged
