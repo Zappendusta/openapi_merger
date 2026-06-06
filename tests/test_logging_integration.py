@@ -204,6 +204,37 @@ def test_merger_logs_schema_collision(monkeypatch, capsys, reset_structlog_to_st
     assert "name=Item" in out
 
 
+def test_merger_logs_security_scheme_collision(monkeypatch, capsys, reset_structlog_to_stdout):
+    from openapi_merger.merger import merge_specs
+
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.setenv("LOG_FORMAT", "logfmt")
+    configure_logging()
+
+    a = {
+        "openapi": "3.0.0",
+        "paths": {"/a": {}},
+        "components": {
+            "schemas": {},
+            "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "bearer"}},
+        },
+    }
+    b = {
+        "openapi": "3.0.0",
+        "paths": {"/b": {}},
+        "components": {
+            "schemas": {},
+            "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "basic"}},
+        },
+    }
+    merge_specs([("a", "AuthApi", a), ("b", "UserApi", b)], title="t", version="1")
+
+    out = capsys.readouterr().out
+    assert "event=merge.collision.security_scheme" in out
+    assert "level=warning" in out
+    assert "name=BearerAuth" in out
+
+
 def test_merger_logs_path_collision_and_raises(monkeypatch, capsys, reset_structlog_to_stdout):
     from openapi_merger.merger import merge_specs
 

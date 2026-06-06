@@ -839,32 +839,3 @@ def test_merge_security_scheme_collision_rewrites_document_level_security():
     assert {"AuthApiBearerAuth": []} in merged["security"]
     assert {"UserApiBearerAuth": []} in merged["security"]
     assert {"BearerAuth": []} not in merged["security"]
-
-
-def test_merge_security_scheme_collision_logged(caplog):
-    import logging
-    caplog.set_level(logging.WARNING)
-    source_a = {
-        "openapi": "3.0.0",
-        "info": {"title": "T", "version": "1"},
-        "paths": {"/a": {}},
-        "components": {
-            "schemas": {},
-            "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "bearer"}},
-        },
-    }
-    source_b = {
-        "openapi": "3.0.0",
-        "info": {"title": "T", "version": "1"},
-        "paths": {"/b": {}},
-        "components": {
-            "schemas": {},
-            "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "basic"}},
-        },
-    }
-    merge_specs(
-        [("a", "AuthApi", source_a), ("b", "UserApi", source_b)],
-        title="T",
-        version="1",
-    )
-    assert any("merge.collision.security_scheme" in r.getMessage() for r in caplog.records)
