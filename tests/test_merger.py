@@ -160,6 +160,61 @@ def test_source_with_no_components():
     assert detect_schema_collisions(sources) == {}
 
 
+# --- detect_security_scheme_collisions ---
+
+from openapi_merger.merger import detect_security_scheme_collisions
+
+
+def _sec(name, scheme):
+    return {"components": {"securitySchemes": {name: scheme}}}
+
+
+def test_sec_no_collision_when_only_one_source_defines_it():
+    sources = [
+        ("a", "A", _sec("BearerAuth", {"type": "http", "scheme": "bearer"})),
+        ("b", "B", {"components": {}}),
+    ]
+    assert detect_security_scheme_collisions(sources) == {}
+
+
+def test_sec_no_collision_when_definitions_are_equal():
+    scheme = {"type": "http", "scheme": "bearer"}
+    sources = [
+        ("a", "A", _sec("BearerAuth", scheme)),
+        ("b", "B", _sec("BearerAuth", scheme)),
+    ]
+    assert detect_security_scheme_collisions(sources) == {}
+
+
+def test_sec_collision_when_definitions_differ():
+    sources = [
+        ("a", "A", _sec("BearerAuth", {"type": "http", "scheme": "bearer"})),
+        ("b", "B", _sec("BearerAuth", {"type": "http", "scheme": "basic"})),
+    ]
+    collisions = detect_security_scheme_collisions(sources)
+    assert "BearerAuth" in collisions
+    assert set(collisions["BearerAuth"]) == {"a", "b"}
+
+
+def test_sec_collision_only_reports_differing_sources():
+    scheme = {"type": "http", "scheme": "bearer"}
+    sources = [
+        ("a", "A", _sec("BearerAuth", scheme)),
+        ("b", "B", _sec("BearerAuth", scheme)),
+        ("c", "C", _sec("BearerAuth", {"type": "http", "scheme": "basic"})),
+    ]
+    collisions = detect_security_scheme_collisions(sources)
+    assert "BearerAuth" in collisions  # c differs from a and b
+
+
+def test_sec_source_without_components_ok():
+    sources = [
+        ("a", "A", {"paths": {}}),
+        ("b", "B", _sec("BearerAuth", {"type": "http", "scheme": "bearer"})),
+    ]
+    assert detect_security_scheme_collisions(sources) == {}
+
+
 # --- assign_unique_operation_ids ---
 
 def _op(op_id, summary="s"):

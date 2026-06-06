@@ -141,6 +141,29 @@ def detect_schema_collisions(sources: list[Source]) -> dict[str, list[str]]:
     return collisions
 
 
+def detect_security_scheme_collisions(sources: list[Source]) -> dict[str, list[str]]:
+    """
+    Returns scheme_name -> [source_names] for securityScheme names that appear in
+    multiple sources with different content. Equal-content duplicates are not
+    collisions.
+    """
+    scheme_map: dict[str, list[tuple[str, dict]]] = {}
+    for source_name, _prefix, doc in sources:
+        schemes = doc.get("components", {}).get("securitySchemes", {})
+        for name, scheme in schemes.items():
+            scheme_map.setdefault(name, []).append((source_name, scheme))
+
+    collisions = {}
+    for name, entries in scheme_map.items():
+        if len(entries) <= 1:
+            continue
+        first = entries[0][1]
+        if all(e[1] == first for e in entries[1:]):
+            continue
+        collisions[name] = [e[0] for e in entries]
+    return collisions
+
+
 def merge_specs(sources: list[Source], title: str, version: str) -> dict:
     collisions = detect_schema_collisions(sources)
 
