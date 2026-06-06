@@ -758,3 +758,113 @@ def test_merge_security_schemes_distinct_names_carried_through():
     schemes = merged["components"]["securitySchemes"]
     assert "BearerAuth" in schemes
     assert "ApiKey" in schemes
+
+
+def test_merge_security_scheme_collision_resolved_with_prefix():
+    source_a = {
+        "openapi": "3.0.0",
+        "info": {"title": "T", "version": "1"},
+        "paths": {
+            "/a": {
+                "get": {
+                    "operationId": "getA",
+                    "security": [{"BearerAuth": []}],
+                    "responses": {"200": {}},
+                }
+            }
+        },
+        "components": {
+            "schemas": {},
+            "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "bearer"}},
+        },
+    }
+    source_b = {
+        "openapi": "3.0.0",
+        "info": {"title": "T", "version": "1"},
+        "paths": {
+            "/b": {
+                "get": {
+                    "operationId": "getB",
+                    "security": [{"BearerAuth": []}],
+                    "responses": {"200": {}},
+                }
+            }
+        },
+        "components": {
+            "schemas": {},
+            "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "basic"}},
+        },
+    }
+    merged = merge_specs(
+        [("a", "AuthApi", source_a), ("b", "UserApi", source_b)],
+        title="T",
+        version="1",
+    )
+    schemes = merged["components"]["securitySchemes"]
+    assert "AuthApiBearerAuth" in schemes
+    assert "UserApiBearerAuth" in schemes
+    assert "BearerAuth" not in schemes
+    # Each operation must now reference its own renamed scheme.
+    assert merged["paths"]["/a"]["get"]["security"] == [{"AuthApiBearerAuth": []}]
+    assert merged["paths"]["/b"]["get"]["security"] == [{"UserApiBearerAuth": []}]
+
+
+def test_merge_security_scheme_collision_rewrites_document_level_security():
+    source_a = {
+        "openapi": "3.0.0",
+        "info": {"title": "T", "version": "1"},
+        "security": [{"BearerAuth": []}],
+        "paths": {"/a": {}},
+        "components": {
+            "schemas": {},
+            "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "bearer"}},
+        },
+    }
+    source_b = {
+        "openapi": "3.0.0",
+        "info": {"title": "T", "version": "1"},
+        "security": [{"BearerAuth": []}],
+        "paths": {"/b": {}},
+        "components": {
+            "schemas": {},
+            "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "basic"}},
+        },
+    }
+    merged = merge_specs(
+        [("a", "AuthApi", source_a), ("b", "UserApi", source_b)],
+        title="T",
+        version="1",
+    )
+    # Both renamed requirements must appear in the merged document-level security list.
+    assert {"AuthApiBearerAuth": []} in merged["security"]
+    assert {"UserApiBearerAuth": []} in merged["security"]
+    assert {"BearerAuth": []} not in merged["security"]
+
+
+def test_merge_security_scheme_collision_logged(caplog):
+    import logging
+    caplog.set_level(logging.WARNING)
+    source_a = {
+        "openapi": "3.0.0",
+        "info": {"title": "T", "version": "1"},
+        "paths": {"/a": {}},
+        "components": {
+            "schemas": {},
+            "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "bearer"}},
+        },
+    }
+    source_b = {
+        "openapi": "3.0.0",
+        "info": {"title": "T", "version": "1"},
+        "paths": {"/b": {}},
+        "components": {
+            "schemas": {},
+            "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "basic"}},
+        },
+    }
+    merge_specs(
+        [("a", "AuthApi", source_a), ("b", "UserApi", source_b)],
+        title="T",
+        version="1",
+    )
+    assert any("merge.collision.security_scheme" in r.getMessage() for r in caplog.records)

@@ -218,6 +218,7 @@ def detect_security_scheme_collisions(sources: list[Source]) -> dict[str, list[s
 
 def merge_specs(sources: list[Source], title: str, version: str) -> dict:
     collisions = detect_schema_collisions(sources)
+    sec_collisions = detect_security_scheme_collisions(sources)
 
     for name, sources_with_name in collisions.items():
         log.warning(
@@ -227,7 +228,15 @@ def merge_specs(sources: list[Source], title: str, version: str) -> dict:
             resolution="prefix",
         )
 
-    # Apply schema prefix and $ref rewrites per source.
+    for name, sources_with_name in sec_collisions.items():
+        log.warning(
+            "merge.collision.security_scheme",
+            name=name,
+            sources=sources_with_name,
+            resolution="prefix",
+        )
+
+    # Apply schema and securityScheme prefix renames per source.
     processed: list[Source] = []
     for source_name, prefix, doc in sources:
         doc = copy.deepcopy(doc)
@@ -240,6 +249,14 @@ def merge_specs(sources: list[Source], title: str, version: str) -> dict:
             if name in schemas:
                 schemas[new_name] = schemas.pop(name)
             doc = rewrite_ref(doc, name, new_name)
+
+        colliding_schemes = [
+            name for name, names in sec_collisions.items() if source_name in names
+        ]
+        for name in colliding_schemes:
+            new_name = f"{prefix}{name}"
+            doc = rewrite_security_scheme_name(doc, name, new_name)
+
         processed.append((source_name, prefix, doc))
 
     # Resolve operationIds globally across the full processed set, mutating in place.
