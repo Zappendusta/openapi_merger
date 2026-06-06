@@ -152,3 +152,48 @@ def test_clear_cache_is_noop_when_empty():
     assert orch._cache is None
     orch.clear_cache()
     assert orch._cache is None
+
+
+@respx.mock
+async def test_get_merged_carries_security_schemes_through():
+    spec_with_security = {
+        "openapi": "3.0.0",
+        "info": {"title": "A", "version": "1"},
+        "paths": {
+            "/api/users": {
+                "get": {
+                    "operationId": "getUser",
+                    "security": [{"BearerAuth": []}],
+                    "responses": {"200": {}},
+                }
+            }
+        },
+        "components": {
+            "schemas": {"User": {"type": "object"}},
+            "securitySchemes": {"BearerAuth": {"type": "http", "scheme": "bearer"}},
+        },
+    }
+
+    respx.get("http://users/openapi.json").mock(
+        return_value=httpx.Response(200, json=spec_with_security)
+    )
+    # source 'orders' is also configured in _SOURCES_CFG, so it needs a response too
+    respx.get("http://orders/openapi.json").mock(
+        return_value=httpx.Response(200, json={
+            "openapi": "3.0.0",
+            "info": {"title": "B", "version": "1"},
+            "paths": {"/api/orders": {"get": {}}},
+            "components": {"schemas": {"Order": {"type": "object"}}},
+        })
+    )
+
+    o = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG)
+    merged = await o.get_merged()
+
+    assert merged["components"]["securitySchemes"]["BearerAuth"] == {
+        "type": "http",
+        "scheme": "bearer",
+    }
+    # The operation-level security reference must survive too
+    op = merged["paths"]["/api/users/users"]["get"]
+    assert op["security"] == [{"BearerAuth": []}]
