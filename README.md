@@ -21,6 +21,42 @@ over HTTP — with optional Basic Auth and in-memory caching.
 
 Results are cached in memory. A `?refresh=true` query parameter forces a rebuild.
 
+## Merge endpoints
+
+The service exposes four merge endpoints. Each runs the same fetch + transform + cache pipeline but plugs a different merge engine:
+
+| Endpoint | Engine | Path collision | Component collision | Security scheme |
+|---|---|---|---|---|
+| `/inhouse/openapi.json` | built-in | 502 error | source-prefix rename | source-prefix rename |
+| `/redocly/openapi.json` | `redocly join` | 502 error | `--prefix-components-with-info-prop title` | 502 error |
+| `/speakeasy/openapi.json` | `speakeasy merge` | fragment paths (`#suffix`) | last-wins + warning | last-wins |
+| `/openapi-merge/openapi.json` | `openapi-merge-cli` | dispute prefix | dispute prefix | first-wins |
+
+The root `spec_path` (default `/openapi.json`) is aliased to the engine named by `default_merger` in `service.yaml`.
+
+### Switching the default engine
+
+In `service.yaml`:
+
+```yaml
+spec_path: /openapi.json
+default_merger: speakeasy   # one of: inhouse | redocly | speakeasy | openapi-merge
+info:
+  title: My Merged API
+  version: 1.0.0
+```
+
+If `default_merger` is missing it defaults to `inhouse`.
+
+### Binary availability
+
+External engines are probed at startup. If a binary is missing, the corresponding endpoint returns HTTP 503; the rest of the service is unaffected. The bundled Docker image contains all three; if you run from source you can install on demand:
+
+```bash
+npm install -g @redocly/cli openapi-merge-cli
+curl -fsSL https://go.speakeasy.com/cli-install.sh | sh
+```
+
 ## Quick start with Docker
 
 The image is published to GitHub Container Registry:
