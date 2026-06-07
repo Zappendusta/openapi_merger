@@ -14,6 +14,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from openapi_merger.build_info import collect_build_info
 from openapi_merger.config import load_service_config, load_sources_config, ServiceConfig
 from openapi_merger.logging_config import configure_logging
+from openapi_merger.mergers.inhouse import InhouseMerger
 from openapi_merger.orchestrator import MergeOrchestrator
 
 log = structlog.get_logger()
@@ -43,7 +44,7 @@ async def lifespan(app: FastAPI):
     src_path = os.getenv("SOURCES_CONFIG", "/config/sources.yaml")
     _service_config = load_service_config(svc_path)
     sources_config = load_sources_config(src_path)
-    _orchestrator = MergeOrchestrator(_service_config, sources_config)
+    _orchestrator = MergeOrchestrator(_service_config, sources_config, strategy=InhouseMerger())
 
     log.info(
         "app.startup",

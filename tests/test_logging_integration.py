@@ -134,6 +134,7 @@ def test_fetcher_logs_failure_then_raises(monkeypatch, capsys, reset_structlog_t
 def test_orchestrator_logs_cache_miss_then_hit(monkeypatch, capsys, reset_structlog_to_stdout):
     from openapi_merger.config import ServiceConfig, SourcesConfig, InfoConfig
     from openapi_merger.orchestrator import MergeOrchestrator
+    from openapi_merger.mergers.inhouse import InhouseMerger
 
     monkeypatch.setenv("LOG_LEVEL", "INFO")
     monkeypatch.setenv("LOG_FORMAT", "logfmt")
@@ -144,7 +145,7 @@ def test_orchestrator_logs_cache_miss_then_hit(monkeypatch, capsys, reset_struct
     )
     svc = ServiceConfig(spec_path="/openapi", info=InfoConfig(title="t", version="1"))
     src_cfg = SourcesConfig(sources=[SourceConfig(name="users", url="https://x/api", schema_prefix="U")])
-    orch = MergeOrchestrator(svc, src_cfg)
+    orch = MergeOrchestrator(svc, src_cfg, strategy=InhouseMerger())
 
     asyncio.run(orch.get_merged())
     asyncio.run(orch.get_merged())  # second call → cache hit
@@ -161,6 +162,7 @@ def test_orchestrator_logs_cache_miss_then_hit(monkeypatch, capsys, reset_struct
 def test_orchestrator_logs_build_failure(monkeypatch, capsys, reset_structlog_to_stdout):
     from openapi_merger.config import ServiceConfig, SourcesConfig, InfoConfig
     from openapi_merger.orchestrator import MergeOrchestrator
+    from openapi_merger.mergers.inhouse import InhouseMerger
 
     monkeypatch.setenv("LOG_LEVEL", "INFO")
     monkeypatch.setenv("LOG_FORMAT", "logfmt")
@@ -169,7 +171,7 @@ def test_orchestrator_logs_build_failure(monkeypatch, capsys, reset_structlog_to
     respx.get("https://x/api").mock(return_value=httpx.Response(500))
     svc = ServiceConfig(spec_path="/openapi", info=InfoConfig(title="t", version="1"))
     src_cfg = SourcesConfig(sources=[SourceConfig(name="users", url="https://x/api", schema_prefix="U")])
-    orch = MergeOrchestrator(svc, src_cfg)
+    orch = MergeOrchestrator(svc, src_cfg, strategy=InhouseMerger())
 
     with pytest.raises(RuntimeError):
         asyncio.run(orch.get_merged())

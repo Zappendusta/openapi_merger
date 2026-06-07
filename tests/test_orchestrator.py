@@ -3,6 +3,7 @@ import respx
 import httpx
 from openapi_merger.orchestrator import MergeOrchestrator
 from openapi_merger.config import ServiceConfig, SourcesConfig
+from openapi_merger.mergers.inhouse import InhouseMerger
 
 
 _SVC_CFG = ServiceConfig.model_validate({
@@ -47,7 +48,7 @@ async def test_get_merged_fetches_and_merges():
     respx.get("http://users/openapi.json").mock(return_value=httpx.Response(200, json=_SPEC_A))
     respx.get("http://orders/openapi.json").mock(return_value=httpx.Response(200, json=_SPEC_B))
 
-    o = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG)
+    o = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG, strategy=InhouseMerger())
     merged = await o.get_merged()
     assert "/api/users/users" in merged["paths"]
     assert "/api/orders/orders" in merged["paths"]
@@ -63,7 +64,7 @@ async def test_second_call_uses_cache():
         return_value=httpx.Response(200, json=_SPEC_B)
     )
 
-    o = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG)
+    o = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG, strategy=InhouseMerger())
     await o.get_merged()
     await o.get_merged()
 
@@ -76,7 +77,7 @@ async def test_refresh_bypasses_cache():
     respx.get("http://users/openapi.json").mock(return_value=httpx.Response(200, json=_SPEC_A))
     respx.get("http://orders/openapi.json").mock(return_value=httpx.Response(200, json=_SPEC_B))
 
-    o = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG)
+    o = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG, strategy=InhouseMerger())
     await o.get_merged()
     respx.get("http://users/openapi.json").mock(return_value=httpx.Response(200, json=_SPEC_A))
     respx.get("http://orders/openapi.json").mock(return_value=httpx.Response(200, json=_SPEC_B))
@@ -90,7 +91,7 @@ async def test_upstream_error_propagates():
     respx.get("http://users/openapi.json").mock(return_value=httpx.Response(500))
     respx.get("http://orders/openapi.json").mock(return_value=httpx.Response(200, json=_SPEC_B))
 
-    o = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG)
+    o = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG, strategy=InhouseMerger())
     with pytest.raises(RuntimeError, match="users"):
         await o.get_merged()
 
@@ -121,7 +122,7 @@ async def test_discard_paths_excluded():
         return_value=httpx.Response(200, json=_SPEC_INTERNAL)
     )
 
-    o = MergeOrchestrator(_SVC_CFG, _SOURCES_DISCARD_CFG)
+    o = MergeOrchestrator(_SVC_CFG, _SOURCES_DISCARD_CFG, strategy=InhouseMerger())
     merged = await o.get_merged()
     assert "/internal/secret" not in merged["paths"]
     assert "/api/users" in merged["paths"]
@@ -135,7 +136,7 @@ async def test_clear_cache_forces_rebuild():
     respx.get("http://orders/openapi.json").mock(
         return_value=httpx.Response(200, json=_SPEC_B)
     )
-    orch = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG)
+    orch = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG, strategy=InhouseMerger())
 
     await orch.get_merged()
     assert respx.calls.call_count == 2
@@ -148,7 +149,7 @@ async def test_clear_cache_forces_rebuild():
 
 
 def test_clear_cache_is_noop_when_empty():
-    orch = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG)
+    orch = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG, strategy=InhouseMerger())
     assert orch._cache is None
     orch.clear_cache()
     assert orch._cache is None
@@ -187,7 +188,7 @@ async def test_get_merged_carries_security_schemes_through():
         })
     )
 
-    o = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG)
+    o = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG, strategy=InhouseMerger())
     merged = await o.get_merged()
 
     assert merged["components"]["securitySchemes"]["BearerAuth"] == {
@@ -197,3 +198,46 @@ async def test_get_merged_carries_security_schemes_through():
     # The operation-level security reference must survive too
     op = merged["paths"]["/api/users/users"]["get"]
     assert op["security"] == [{"BearerAuth": []}]
+
+
+from openapi_merger.mergers.base import MergerStrategy
+from openapi_merger.config import InfoConfig
+
+
+class _StubMerger:
+    key = "stub"
+    display_name = "stub"
+
+    def __init__(self):
+        self.calls = []
+
+    def merge(self, sources, title, version):
+        self.calls.append((len(sources), title, version))
+        return {"openapi": "3.0.0", "info": {"title": title, "version": version}, "paths": {}, "components": {}}
+
+    @classmethod
+    def is_available(cls):
+        return True
+
+
+async def test_orchestrator_delegates_to_strategy(monkeypatch):
+    async def _fake_fetch(source):
+        return {
+            "openapi": "3.0.0",
+            "info": {"title": source.name, "version": "0.1"},
+            "paths": {},
+            "components": {},
+        }
+
+    monkeypatch.setattr("openapi_merger.orchestrator.fetch_spec", _fake_fetch)
+
+    from openapi_merger.config import SourceConfig
+    svc = ServiceConfig(info=InfoConfig(title="T", version="V"))
+    srcs = SourcesConfig(sources=[
+        SourceConfig(name="s1", url="http://x", schema_prefix="P1"),
+    ])
+    strategy = _StubMerger()
+    orch = MergeOrchestrator(svc, srcs, strategy=strategy)
+    result = await orch.get_merged()
+    assert result["info"]["title"] == "T"
+    assert strategy.calls == [(1, "T", "V")]
