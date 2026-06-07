@@ -1417,7 +1417,7 @@ RUN set -eux; \
       arm64) SE_ARCH=linux_arm64 ;; \
       *) echo "unsupported arch ${TARGETARCH}"; exit 1 ;; \
     esac; \
-    curl -fsSL "https://github.com/speakeasy-api/speakeasy/releases/download/v${SPEAKEASY_VERSION}/speakeasy_${SPEAKEASY_VERSION}_${SE_ARCH}.zip" -o /tmp/speakeasy.zip; \
+    curl -fsSL "https://github.com/speakeasy-api/speakeasy/releases/download/v${SPEAKEASY_VERSION}/speakeasy_${SE_ARCH}.zip" -o /tmp/speakeasy.zip; \
     apt-get update && apt-get install -y --no-install-recommends unzip && rm -rf /var/lib/apt/lists/*; \
     unzip /tmp/speakeasy.zip -d /tmp/speakeasy; \
     install -m 0755 /tmp/speakeasy/speakeasy /usr/local/bin/speakeasy; \
@@ -1429,7 +1429,7 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 ARG REDOCLY_VERSION=1.34.5
-ARG OPENAPI_MERGE_CLI_VERSION=1.3.3
+ARG OPENAPI_MERGE_CLI_VERSION=1.3.2
 
 # Install Node.js (for redocly + openapi-merge-cli) and the two CLIs.
 RUN apt-get update \
