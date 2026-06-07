@@ -109,15 +109,11 @@ async def lifespan(app: FastAPI):
         path = f"/{key}{_service_config.spec_path}"
         app.add_api_route(path, _make_spec_handler(key), methods=["GET"])
 
-    async def _default_handler(
-        format: str = Query("json"),
-        refresh: bool = Query(False),
-        credentials: HTTPBasicCredentials | None = Depends(_security),
-    ):
-        handler = _make_spec_handler(_service_config.default_merger)
-        return await handler(format=format, refresh=refresh, credentials=credentials)
-
-    app.add_api_route(_service_config.spec_path, _default_handler, methods=["GET"])
+    app.add_api_route(
+        _service_config.spec_path,
+        _make_spec_handler(_service_config.default_merger),
+        methods=["GET"],
+    )
 
     async def _clear_cache(
         credentials: HTTPBasicCredentials | None = Depends(_security),
