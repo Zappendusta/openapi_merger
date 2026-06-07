@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 from openapi_merger.config import (
-    ServiceConfig, SourcesConfig,
+    ServiceConfig, SourcesConfig, InfoConfig,
     load_service_config, load_sources_config,
 )
 
@@ -102,3 +102,19 @@ def test_source_with_discard_paths():
         }]
     })
     assert cfg.sources[0].discard_paths == ["/internal", "/health"]
+
+
+def test_service_config_default_merger_defaults_to_inhouse():
+    svc = ServiceConfig(info=InfoConfig(title="T", version="V"))
+    assert svc.default_merger == "inhouse"
+
+
+def test_service_config_default_merger_accepts_known_keys():
+    for key in ("inhouse", "redocly", "speakeasy", "openapi-merge"):
+        svc = ServiceConfig(info=InfoConfig(title="T", version="V"), default_merger=key)
+        assert svc.default_merger == key
+
+
+def test_service_config_default_merger_rejects_unknown():
+    with pytest.raises(ValueError):
+        ServiceConfig(info=InfoConfig(title="T", version="V"), default_merger="bogus")

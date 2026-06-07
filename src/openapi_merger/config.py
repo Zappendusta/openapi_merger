@@ -1,7 +1,7 @@
 from __future__ import annotations
 import pathlib
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AuthConfig(BaseModel):
@@ -32,8 +32,17 @@ class InfoConfig(BaseModel):
 class ServiceConfig(BaseModel):
     port: int = 8080
     spec_path: str = "/openapi.json"
+    default_merger: str = "inhouse"
     auth: AuthConfig | None = None
     info: InfoConfig
+
+    @field_validator("default_merger")
+    @classmethod
+    def _validate_default_merger(cls, v: str) -> str:
+        valid = {"inhouse", "redocly", "speakeasy", "openapi-merge"}
+        if v not in valid:
+            raise ValueError(f"default_merger must be one of {sorted(valid)}, got '{v}'")
+        return v
 
 
 class SourcesConfig(BaseModel):
