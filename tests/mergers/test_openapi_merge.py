@@ -13,8 +13,8 @@ def test_openapi_merge_writes_config_and_invokes_binary():
 
     def fake_run_subprocess(cmd, timeout=60):
         captured["cmd"] = cmd
-        workdir = cmd[-1] if cmd[-2] == "--config" else os.path.dirname(cmd[-1])
-        cfg_path = cmd[cmd.index("--config") + 1] if "--config" in cmd else os.path.join(workdir, "openapi-merge.json")
+        cfg_path = cmd[cmd.index("--config") + 1]
+        workdir = os.path.dirname(cfg_path)
         with open(cfg_path) as f:
             captured["config"] = json.load(f)
         output_path = captured["config"]["output"]
@@ -37,6 +37,9 @@ def test_openapi_merge_writes_config_and_invokes_binary():
     assert "inputs" in captured["config"]
     assert len(captured["config"]["inputs"]) == 2
     assert all("inputFile" in entry for entry in captured["config"]["inputs"])
+    for entry in captured["config"]["inputs"]:
+        assert not os.path.isabs(entry["inputFile"]), f"inputFile must be relative, got {entry['inputFile']!r}"
+    assert not os.path.isabs(captured["config"]["output"]), f"output must be relative, got {captured['config']['output']!r}"
 
 
 def test_openapi_merge_unavailable_raises():

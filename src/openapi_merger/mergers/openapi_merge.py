@@ -25,8 +25,8 @@ class OpenApiMergeMerger:
 
         def invoke(input_files, output_file, workdir):
             config = {
-                "inputs": [{"inputFile": path} for path in input_files],
-                "output": output_file,
+                "inputs": [{"inputFile": os.path.basename(path)} for path in input_files],
+                "output": os.path.basename(output_file),
             }
             cfg_path = os.path.join(workdir, "openapi-merge.json")
             with open(cfg_path, "w") as f:
