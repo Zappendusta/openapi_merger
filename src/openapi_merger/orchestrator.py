@@ -23,10 +23,6 @@ class MergeOrchestrator:
         self._strategy = strategy
         self._cache: dict | None = None
 
-    @property
-    def merger_key(self) -> str:
-        return self._strategy.key
-
     async def get_merged(self, refresh: bool = False) -> dict:
         if self._cache is not None and not refresh:
             log.info("merge.cache.hit", merger=self._strategy.key)

@@ -2,7 +2,7 @@ import pytest
 import respx
 import httpx
 from openapi_merger.orchestrator import MergeOrchestrator
-from openapi_merger.config import ServiceConfig, SourcesConfig
+from openapi_merger.config import ServiceConfig, SourcesConfig, InfoConfig, SourceConfig
 from openapi_merger.mergers.inhouse import InhouseMerger
 
 
@@ -200,10 +200,6 @@ async def test_get_merged_carries_security_schemes_through():
     assert op["security"] == [{"BearerAuth": []}]
 
 
-from openapi_merger.mergers.base import MergerStrategy
-from openapi_merger.config import InfoConfig
-
-
 class _StubMerger:
     key = "stub"
     display_name = "stub"
@@ -231,7 +227,6 @@ async def test_orchestrator_delegates_to_strategy(monkeypatch):
 
     monkeypatch.setattr("openapi_merger.orchestrator.fetch_spec", _fake_fetch)
 
-    from openapi_merger.config import SourceConfig
     svc = ServiceConfig(info=InfoConfig(title="T", version="V"))
     srcs = SourcesConfig(sources=[
         SourceConfig(name="s1", url="http://x", schema_prefix="P1"),
