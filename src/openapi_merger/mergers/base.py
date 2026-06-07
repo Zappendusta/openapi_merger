@@ -3,7 +3,7 @@ from typing import Protocol, runtime_checkable
 
 
 class MergerNotAvailable(RuntimeError):
-    """Raised when a merger's underlying binary is not installed."""
+    """Raised by external merger adapters when the underlying binary is absent from PATH."""
 
 
 @runtime_checkable
@@ -11,7 +11,7 @@ class MergerStrategy(Protocol):
     """Contract for an OpenAPI merger implementation.
 
     Sources are tuples of (source_name, schema_prefix, pre_transformed_doc).
-    The schema_prefix is honored only by InhouseMerger; external mergers ignore it.
+    Each implementation decides how to interpret schema_prefix.
     """
 
     key: str
