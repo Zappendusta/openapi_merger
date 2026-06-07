@@ -2,10 +2,6 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 
-class MergerNotAvailable(RuntimeError):
-    """Raised by external merger adapters when the underlying binary is absent from PATH."""
-
-
 @runtime_checkable
 class MergerStrategy(Protocol):
     """Contract for an OpenAPI merger implementation.

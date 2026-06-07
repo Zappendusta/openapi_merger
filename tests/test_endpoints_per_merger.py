@@ -90,3 +90,52 @@ def test_admin_clear_clears_all_caches(app_with_stub_mergers):
         app_with_stub_mergers.get(path)
     r = app_with_stub_mergers.post("/admin/cache/clear")
     assert r.status_code == 204
+
+
+def test_unavailable_merger_returns_503(monkeypatch, tmp_path):
+    svc_yaml = tmp_path / "service.yaml"
+    svc_yaml.write_text(
+        "spec_path: /openapi.json\n"
+        "default_merger: inhouse\n"
+        "info:\n  title: T\n  version: V\n"
+    )
+    src_yaml = tmp_path / "sources.yaml"
+    src_yaml.write_text(
+        "sources:\n"
+        "  - name: alpha\n    url: http://alpha.invalid\n    schema_prefix: A\n"
+    )
+    monkeypatch.setenv("SERVICE_CONFIG", str(svc_yaml))
+    monkeypatch.setenv("SOURCES_CONFIG", str(src_yaml))
+
+    async def _fake_fetch(source):
+        return {
+            "openapi": "3.0.0",
+            "info": {"title": source.name, "version": "0.1"},
+            "paths": {},
+            "components": {"schemas": {}},
+        }
+    monkeypatch.setattr("openapi_merger.orchestrator.fetch_spec", _fake_fetch)
+
+    class _UnavailableSpeakeasy:
+        key = "speakeasy"
+        display_name = "Speakeasy"
+        binary = "speakeasy"
+
+        @classmethod
+        def is_available(cls):
+            return False
+
+        def merge(self, sources, title, version):
+            raise AssertionError("should never be called when is_available is False")
+
+    from openapi_merger.mergers.inhouse import InhouseMerger
+    fake_registry = {
+        "inhouse": InhouseMerger,
+        "speakeasy": _UnavailableSpeakeasy,
+    }
+    monkeypatch.setattr("openapi_merger.main.MERGER_REGISTRY", fake_registry)
+
+    with TestClient(main_module.app) as client:
+        r = client.get("/speakeasy/openapi.json")
+        assert r.status_code == 503
+        assert "speakeasy" in r.json()["detail"]
