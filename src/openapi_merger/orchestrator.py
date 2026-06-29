@@ -55,6 +55,7 @@ class MergeOrchestrator:
                     doc.get("paths", {}),
                     source.route_transforms,
                     discard_paths=source.discard_paths,
+                    origin=source.name,
                 )
                 paths_after = len(doc["paths"])
                 log.info(

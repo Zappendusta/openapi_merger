@@ -89,3 +89,67 @@ def test_discard_exact_path_no_trailing_segment():
     result = transform_paths(paths, [], discard_paths=["/internal"])
     assert "/internal" not in result
     assert "/api/users" in result
+
+
+def test_origin_stamped_on_operations():
+    paths = {"/users": {"get": {"summary": "list"}, "post": {"summary": "create"}}}
+    result = transform_paths(paths, [], origin="absence api")
+    assert result["/users"]["get"]["x-origin-api"] == "absence api"
+    assert result["/users"]["post"]["x-origin-api"] == "absence api"
+
+
+def test_origin_only_on_http_methods():
+    paths = {
+        "/users": {
+            "get": {"summary": "list"},
+            "parameters": [{"name": "q", "in": "query"}],
+            "summary": "Users path",
+            "x-internal": True,
+        }
+    }
+    result = transform_paths(paths, [], origin="absence api")
+    assert result["/users"]["get"]["x-origin-api"] == "absence api"
+    # non-operation keys are left exactly as they were
+    assert result["/users"]["parameters"] == [{"name": "q", "in": "query"}]
+    assert result["/users"]["summary"] == "Users path"
+    assert result["/users"]["x-internal"] is True
+
+
+def test_origin_none_no_marking():
+    paths = {"/users": {"get": {"summary": "list"}}}
+    result = transform_paths(paths, [], origin=None)
+    assert result == {"/users": {"get": {"summary": "list"}}}
+
+
+def test_origin_overwrites_existing():
+    paths = {"/users": {"get": {"x-origin-api": "stale"}}}
+    result = transform_paths(paths, [], origin="absence api")
+    assert result["/users"]["get"]["x-origin-api"] == "absence api"
+
+
+def test_origin_skips_non_dict_operation():
+    # malformed operation value must not crash the merge
+    paths = {"/users": {"get": "not-a-dict"}}
+    result = transform_paths(paths, [], origin="absence api")
+    assert result["/users"]["get"] == "not-a-dict"
+
+
+def test_origin_uppercase_method_marked():
+    paths = {"/users": {"GET": {"summary": "list"}}}
+    result = transform_paths(paths, [], origin="absence api")
+    assert result["/users"]["GET"]["x-origin-api"] == "absence api"
+
+
+def test_origin_combined_with_transform_and_discard():
+    paths = {
+        "/internal/x": {"get": {}},
+        "/api/users": {"get": {}},
+    }
+    result = transform_paths(
+        paths,
+        [_t("/api", "/api/v2")],
+        discard_paths=["/internal"],
+        origin="absence api",
+    )
+    assert "/internal/x" not in result
+    assert result["/api/v2/users"]["get"]["x-origin-api"] == "absence api"
