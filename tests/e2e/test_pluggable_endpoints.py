@@ -84,3 +84,36 @@ def test_openapi_merge_endpoint_real(app_with_real_mergers):
     assert body["info"] == {"title": "Merged", "version": "1.0.0"}
     assert "/users" in body["paths"]
     assert "/orders" in body["paths"]
+
+
+def test_inhouse_endpoint_marks_origin(app_with_real_mergers):
+    body = app_with_real_mergers.get("/inhouse/openapi.json").json()
+    assert body["paths"]["/users"]["get"]["x-origin-api"] == "alpha"
+    assert body["paths"]["/orders"]["get"]["x-origin-api"] == "beta"
+
+
+def test_redocly_endpoint_preserves_origin(app_with_real_mergers):
+    _skip_if_missing("redocly")
+    r = app_with_real_mergers.get("/redocly/openapi.json")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["paths"]["/users"]["get"]["x-origin-api"] == "alpha"
+    assert body["paths"]["/orders"]["get"]["x-origin-api"] == "beta"
+
+
+def test_speakeasy_endpoint_preserves_origin(app_with_real_mergers):
+    _skip_if_missing("speakeasy")
+    r = app_with_real_mergers.get("/speakeasy/openapi.json")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["paths"]["/users"]["get"]["x-origin-api"] == "alpha"
+    assert body["paths"]["/orders"]["get"]["x-origin-api"] == "beta"
+
+
+def test_openapi_merge_endpoint_preserves_origin(app_with_real_mergers):
+    _skip_if_missing("openapi-merge-cli")
+    r = app_with_real_mergers.get("/openapi-merge/openapi.json")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["paths"]["/users"]["get"]["x-origin-api"] == "alpha"
+    assert body["paths"]["/orders"]["get"]["x-origin-api"] == "beta"

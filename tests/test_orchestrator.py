@@ -236,3 +236,15 @@ async def test_orchestrator_delegates_to_strategy(monkeypatch):
     result = await orch.get_merged()
     assert result["info"]["title"] == "T"
     assert strategy.calls == [(1, "T", "V")]
+
+
+@respx.mock
+async def test_get_merged_stamps_origin_per_source():
+    respx.get("http://users/openapi.json").mock(return_value=httpx.Response(200, json=_SPEC_A))
+    respx.get("http://orders/openapi.json").mock(return_value=httpx.Response(200, json=_SPEC_B))
+
+    o = MergeOrchestrator(_SVC_CFG, _SOURCES_CFG, strategy=InhouseMerger())
+    merged = await o.get_merged()
+
+    assert merged["paths"]["/api/users/users"]["get"]["x-origin-api"] == "users"
+    assert merged["paths"]["/api/orders/orders"]["get"]["x-origin-api"] == "orders"
