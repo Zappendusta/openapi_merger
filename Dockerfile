@@ -54,4 +54,4 @@ ENV BUILD_TIME=${BUILD_TIME}
 EXPOSE 8080
 ENV SERVICE_CONFIG=/config/service.yaml
 ENV SOURCES_CONFIG=/config/sources.yaml
-CMD ["uvicorn", "openapi_merger.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["python", "-m", "openapi_merger"]

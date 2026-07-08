@@ -65,10 +65,18 @@ The image is published to GitHub Container Registry:
 docker pull ghcr.io/Zappendusta/openapi_merger:latest
 ```
 
-Run with your config directory mounted (the container always listens on port 8080; change the left-hand port to use a different host port):
+Run with your config directory mounted. The container listens on the `port` from `service.yaml` (default 8080); the `PORT` env variable overrides it:
 
 ```bash
 docker run -p 8080:8080 \
+  -v $(pwd)/config:/config \
+  ghcr.io/Zappendusta/openapi_merger:latest
+```
+
+To listen on a different port:
+
+```bash
+docker run -e PORT=9000 -p 9000:9000 \
   -v $(pwd)/config:/config \
   ghcr.io/Zappendusta/openapi_merger:latest
 ```
@@ -81,9 +89,8 @@ The service expects two files in `/config/`:
 
 ### service.yaml
 
-> **Note:** The listening port is set via the uvicorn command (or `-p` in Docker), not in this file.
-
 ```yaml
+port: 8080                 # listening port (env var PORT overrides this)
 spec_path: /openapi.json   # path where the merged spec is served
 
 info:
@@ -122,10 +129,11 @@ sources:
 
 ### Config file locations
 
-| Env variable       | Default                  | Purpose           |
-|--------------------|--------------------------|-------------------|
-| `SERVICE_CONFIG`   | `/config/service.yaml`   | Server settings   |
-| `SOURCES_CONFIG`   | `/config/sources.yaml`   | Source APIs       |
+| Env variable       | Default                  | Purpose                              |
+|--------------------|--------------------------|--------------------------------------|
+| `SERVICE_CONFIG`   | `/config/service.yaml`   | Server settings                      |
+| `SOURCES_CONFIG`   | `/config/sources.yaml`   | Source APIs                          |
+| `PORT`             | `port` from service.yaml | Listening port override              |
 
 ## API
 
@@ -151,7 +159,7 @@ pip install -e ".[dev]"
 
 SERVICE_CONFIG=example/service.yaml \
 SOURCES_CONFIG=example/sources.yaml \
-uvicorn openapi_merger.main:app --port 8080
+python -m openapi_merger
 ```
 
 > **Note:** The example configs point to placeholder upstream URLs (`http://users-service/...`). The service will start, but the first request to the spec endpoint will return a 502 until you update `sources.yaml` with real upstream URLs.
