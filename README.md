@@ -8,9 +8,11 @@ over HTTP — with optional Basic Auth and in-memory caching.
 
 1. **Fetches** 1–N upstream OpenAPI specs (JSON or YAML) on demand, supporting
    per-source Basic Auth.
-2. **Transforms** route prefixes for each source independently, and optionally
+2. **Transforms** route prefixes for each source independently, optionally
    **discards** unwanted upstream paths by prefix
-   (e.g. `discard_paths: [/internal]` drops all paths starting with `/internal`).
+   (e.g. `discard_paths: [/internal]` drops all paths starting with `/internal`),
+   and **stamps** every operation with `x-origin-api: <source name>` so
+   consumers can group or filter routes by their upstream API.
 3. **Merges** all specs into one OpenAPI 3.x document:
    - Duplicate schemas with identical content are silently deduplicated.
    - Colliding schemas (same name, different content) are automatically
@@ -33,6 +35,23 @@ The service exposes four merge endpoints. Each runs the same fetch + transform +
 | `/openapi-merge/openapi.json` | `openapi-merge-cli` | dispute prefix | dispute prefix | first-wins |
 
 The root `spec_path` (default `/openapi.json`) is aliased to the engine named by `default_merger` in `service.yaml`.
+
+### Route origin marking
+
+Every operation in the merged spec carries a vendor extension identifying its
+upstream source:
+
+```yaml
+paths:
+  /api/users/list:
+    get:
+      x-origin-api: users   # the source `name` from sources.yaml
+```
+
+The stamp is applied before merging, so it survives all four merge engines. If
+an upstream spec already sets `x-origin-api`, it is overwritten — this service
+is the authority on origin. Path-level keys (`parameters`, `summary`,
+`servers`, ...) are left untouched.
 
 ### Switching the default engine
 
@@ -107,7 +126,7 @@ info:
 
 ```yaml
 sources:
-  - name: users
+  - name: users              # also stamped as x-origin-api on each operation
     url: http://users-service/openapi.json
     schema_prefix: Users     # prefix applied to schemas on collision
     # auth:                  # optional upstream Basic Auth
@@ -208,9 +227,12 @@ openapi_merger/
 │   ├── main.py          # FastAPI app, auth middleware, lifespan wiring
 │   ├── config.py        # Pydantic models for service.yaml / sources.yaml
 │   ├── fetcher.py       # Async HTTP fetch (httpx), JSON/YAML auto-detect
-│   ├── transformer.py   # Route prefix rewriting
-│   ├── merger.py        # Schema collision detection, spec merging
-│   └── orchestrator.py  # Coordinates fetch → transform → merge, in-memory cache
+│   ├── transformer.py   # Path discard, route prefix rewriting, x-origin-api stamping
+│   ├── merger.py        # Schema collision detection, spec merging (in-house engine)
+│   ├── mergers/         # Pluggable merge engines: inhouse, redocly, speakeasy, openapi-merge
+│   ├── orchestrator.py  # Coordinates fetch → transform → merge, in-memory cache
+│   ├── logging_config.py # Structured logging (logfmt / JSON)
+│   └── build_info.py    # Startup build-info banner
 ├── tests/               # pytest suite (unit + integration with respx mocks)
 ├── example/             # Example service.yaml and sources.yaml
 ├── Dockerfile           # python:3.12-slim, installs package, runs uvicorn
