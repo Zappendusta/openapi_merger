@@ -24,8 +24,15 @@ class OpenApiMergeMerger:
             raise RuntimeError(f"{self.binary} binary not found in PATH")
 
         def invoke(input_files, output_file, workdir):
+            # input_files order matches sources order (run_external_merger writes in order)
+            inputs = []
+            for path, (_name, prefix, _doc) in zip(input_files, sources):
+                entry: dict = {"inputFile": os.path.basename(path)}
+                if prefix:
+                    entry["dispute"] = {"prefix": prefix}
+                inputs.append(entry)
             config = {
-                "inputs": [{"inputFile": os.path.basename(path)} for path in input_files],
+                "inputs": inputs,
                 "output": os.path.basename(output_file),
             }
             cfg_path = os.path.join(workdir, "openapi-merge.json")

@@ -37,9 +37,31 @@ def test_openapi_merge_writes_config_and_invokes_binary():
     assert "inputs" in captured["config"]
     assert len(captured["config"]["inputs"]) == 2
     assert all("inputFile" in entry for entry in captured["config"]["inputs"])
+    assert [e["dispute"] for e in captured["config"]["inputs"]] == [{"prefix": "P1"}, {"prefix": "P2"}]
     for entry in captured["config"]["inputs"]:
         assert not os.path.isabs(entry["inputFile"]), f"inputFile must be relative, got {entry['inputFile']!r}"
     assert not os.path.isabs(captured["config"]["output"]), f"output must be relative, got {captured['config']['output']!r}"
+
+
+def test_openapi_merge_empty_prefix_omits_dispute():
+    captured = {}
+
+    def fake_run_subprocess(cmd, timeout=60):
+        cfg_path = cmd[cmd.index("--config") + 1]
+        workdir = os.path.dirname(cfg_path)
+        with open(cfg_path) as f:
+            captured["config"] = json.load(f)
+        with open(os.path.join(workdir, captured["config"]["output"]), "w") as f:
+            yaml.safe_dump({"openapi": "3.0.0", "info": {}, "paths": {}, "components": {}}, f)
+        return (0, "", "")
+
+    with patch("openapi_merger.mergers.openapi_merge.run_subprocess", side_effect=fake_run_subprocess):
+        with patch("openapi_merger.mergers.openapi_merge.shutil.which", return_value="/usr/bin/openapi-merge-cli"):
+            OpenApiMergeMerger().merge(
+                [("alpha", "", {"openapi": "3.0.0", "info": {}, "paths": {}, "components": {}})],
+                title="T", version="V",
+            )
+    assert "dispute" not in captured["config"]["inputs"][0]
 
 
 def test_openapi_merge_unavailable_raises():
