@@ -33,6 +33,7 @@ class ServiceConfig(BaseModel):
     port: int = 8080
     spec_path: str = "/openapi.json"
     default_merger: str = "inhouse"
+    cache_ttl_seconds: int = Field(default=600, ge=0)
     auth: AuthConfig | None = None
     info: InfoConfig
 

@@ -22,18 +22,33 @@ class MergeOrchestrator:
         self._sources = sources_config
         self._strategy = strategy
         self._cache: dict | None = None
+        self._cached_at: float = 0.0
+
+    def _age(self) -> float:
+        return time.monotonic() - self._cached_at
 
     async def get_merged(self, refresh: bool = False) -> dict:
-        if self._cache is not None and not refresh:
-            log.info("merge.cache.hit", merger=self._strategy.key)
+        ttl = self._service.cache_ttl_seconds
+        expired = ttl == 0 or self._age() >= ttl
+        if self._cache is not None and not refresh and not expired:
+            log.info("merge.cache.hit", merger=self._strategy.key, age_s=int(self._age()))
             return self._cache
-        log.info("merge.cache.miss", merger=self._strategy.key, refresh=refresh, cached=self._cache is not None)
+        log.info(
+            "merge.cache.miss",
+            merger=self._strategy.key,
+            refresh=refresh,
+            cached=self._cache is not None,
+            expired=self._cache is not None and expired,
+            ttl_s=ttl,
+        )
         self._cache = await self._build()
+        self._cached_at = time.monotonic()
         return self._cache
 
     def clear_cache(self) -> None:
         had_cache = self._cache is not None
         self._cache = None
+        self._cached_at = 0.0
         log.info("merge.cache.clear", merger=self._strategy.key, had_cache=had_cache)
 
     async def _build(self) -> dict:

@@ -73,6 +73,44 @@ async def test_second_call_uses_cache():
 
 
 @respx.mock
+async def test_cache_expires_after_ttl(monkeypatch):
+    route_a = respx.get("http://users/openapi.json").mock(
+        return_value=httpx.Response(200, json=_SPEC_A)
+    )
+    respx.get("http://orders/openapi.json").mock(return_value=httpx.Response(200, json=_SPEC_B))
+
+    cfg = _SVC_CFG.model_copy(update={"cache_ttl_seconds": 600})
+    o = MergeOrchestrator(cfg, _SOURCES_CFG, strategy=InhouseMerger())
+
+    now = 1000.0
+    monkeypatch.setattr("openapi_merger.orchestrator.time.monotonic", lambda: now)
+    await o.get_merged()
+    assert route_a.call_count == 1
+
+    now = 1599.0  # still inside TTL
+    await o.get_merged()
+    assert route_a.call_count == 1
+
+    now = 1601.0  # past TTL
+    await o.get_merged()
+    assert route_a.call_count == 2
+
+
+@respx.mock
+async def test_ttl_zero_disables_cache():
+    route_a = respx.get("http://users/openapi.json").mock(
+        return_value=httpx.Response(200, json=_SPEC_A)
+    )
+    respx.get("http://orders/openapi.json").mock(return_value=httpx.Response(200, json=_SPEC_B))
+
+    cfg = _SVC_CFG.model_copy(update={"cache_ttl_seconds": 0})
+    o = MergeOrchestrator(cfg, _SOURCES_CFG, strategy=InhouseMerger())
+    await o.get_merged()
+    await o.get_merged()
+    assert route_a.call_count == 2
+
+
+@respx.mock
 async def test_refresh_bypasses_cache():
     respx.get("http://users/openapi.json").mock(return_value=httpx.Response(200, json=_SPEC_A))
     respx.get("http://orders/openapi.json").mock(return_value=httpx.Response(200, json=_SPEC_B))

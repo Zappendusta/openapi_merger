@@ -1,5 +1,6 @@
 port: 8080
 spec_path: /openapi.json
+cache_ttl_seconds: 600  # 0 disables caching
 info:
   title: My Merged API
   version: 1.0.0

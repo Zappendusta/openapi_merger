@@ -21,7 +21,7 @@ over HTTP — with optional Basic Auth and in-memory caching.
 4. **Serves** the merged spec at a configurable path, with optional Basic Auth,
    in JSON or YAML format.
 
-Results are cached in memory. A `?refresh=true` query parameter forces a rebuild.
+Results are cached in memory for `cache_ttl_seconds` (default 600 s / 10 min; `0` disables caching). A `?refresh=true` query parameter forces a rebuild.
 
 ## Merge endpoints
 
@@ -111,6 +111,7 @@ The service expects two files in `/config/`:
 ```yaml
 port: 8080                 # listening port (env var PORT overrides this)
 spec_path: /openapi.json   # path where the merged spec is served
+cache_ttl_seconds: 600     # merged-spec cache lifetime; 0 disables caching
 
 info:
   title: My Merged API
